@@ -1,6 +1,7 @@
 import { initSpeech, speak } from './speech.js';
 import { initKeyboard, on as onKey } from './input/keyboard.js';
 import { initTouch, on as onTouch } from './input/touch.js';
+import { InputHandler } from './input/inputHandler.js';
 import { initSound } from './sound.js';
 
 let soundReady = false;
@@ -49,3 +50,16 @@ onTouch('tap', event => {
 	speak(`${finger}${count}tap`);
 	ensureSound();
 });
+
+// Demonstrate the action-based input layer alongside the raw echo above.
+const demo = new InputHandler();
+demo.bind('action.confirm', {
+	press: [' ', 'enter'],
+	tap: [{ fingerCount: 1, tapCount: 2 }],
+});
+demo.bind('action.menu', {
+	press: ['escape'],
+	tap: [{ fingerCount: 2, tapCount: 1 }],
+});
+demo.on('action.confirm', () => speak('Action: confirm'));
+demo.on('action.menu', () => speak('Action: menu'));
