@@ -1,0 +1,178 @@
+import { MSG, ERR, roomState, roomCountdown, lobbyUpdate } from '../network/protocol.js';
+
+const ADJECTIVES = ['swift', 'brave', 'quiet', 'bright', 'calm', 'wild'];
+const NOUNS      = ['otter', 'falcon', 'comet', 'ember', 'river', 'spark'];
+
+// ---- Room instances ------------------------------------------------------
+
+export class Room {
+	constructor({ id, host, mode, pointLimit }) {
+		this.id = id;
+		this.host = host;
+		this.members = [host];
+		this.mode = mode;
+		this.pointLimit = pointLimit;
+		this.phase = 'waiting';
+		this.ready = new WeakSet();
+		this.confirmed = new WeakSet();
+		this.createdAt = Date.now();
+		host.room = this;
+	}
+
+	addMember(player) {
+		if (this.isFull())            throw new RoomError(ERR.ROOM_FULL);
+		if (this.phase !== 'waiting') throw new RoomError(ERR.ROOM_NOT_JOINABLE);
+		this.members.push(player);
+		player.room = this;
+		this.broadcastState();
+		broadcastLobbyUpdate();
+	}
+
+	removeMember(player) {
+		this.members = this.members.filter(m => m !== player);
+		this.ready.delete(player);
+		this.confirmed.delete(player);
+		player.room = null;
+		for (const m of this.members) {
+			this.ready.delete(m);
+			this.confirmed.delete(m);
+		}
+		if (this.phase !== 'playing') this.phase = 'waiting';
+		if (this.members.length === 0) {
+			destroyRoom(this);
+			return;
+		}
+		this.broadcastState();
+		broadcastLobbyUpdate();
+	}
+
+	setReady(player, ready) {
+		if (ready) this.ready.add(player);
+		else this.ready.delete(player);
+		const wasReady = this.phase === 'ready';
+		if (this.allReady()) this.phase = 'ready';
+		else if (wasReady)   this.phase = 'waiting';
+		this.broadcastState();
+		broadcastLobbyUpdate();
+	}
+
+	setConfirmed(player) {
+		this.confirmed.add(player);
+		if (this.allConfirmed()) {
+			this.phase = 'countdown';
+			this.broadcastCountdown();
+		}
+		this.broadcastState();
+		broadcastLobbyUpdate();
+	}
+
+	onMemberDisconnected(_player) {
+		this.broadcastState();
+	}
+
+	isFull()       { return this.members.length >= 2; }
+	allReady()     { return this.members.length === 2 && this.members.every(m => this.ready.has(m)); }
+	allConfirmed() { return this.members.length === 2 && this.members.every(m => this.confirmed.has(m)); }
+	isReady(p)     { return this.ready.has(p); }
+	isConfirmed(p) { return this.confirmed.has(p); }
+
+	snapshot() {
+		return {
+			id: this.id,
+			mode: this.mode,
+			pointLimit: this.pointLimit,
+			phase: this.phase,
+			members: this.members.map(m => m.toMemberSnapshot()),
+			createdAt: this.createdAt,
+		};
+	}
+
+	summary() {
+		return {
+			id: this.id,
+			hostName: this.host.name,
+			mode: this.mode,
+			pointLimit: this.pointLimit,
+			memberCount: this.members.length,
+			phase: this.phase,
+		};
+	}
+
+	broadcastState() {
+		for (const m of this.members) m.send(roomState({ room: this.snapshot() }));
+	}
+
+	broadcastCountdown() {
+		for (const m of this.members) m.send(roomCountdown({ roomId: this.id }));
+	}
+
+	resendStateTo(player) {
+		player.send(roomState({ room: this.snapshot() }));
+	}
+}
+
+export class RoomError extends Error {
+	constructor(code) {
+		super(code);
+		this.code = code;
+	}
+}
+
+// ---- Registry + lobby subscriptions --------------------------------------
+
+const byId = new Map();
+const lobbySubscribers = new Set();
+
+export function createRoom(host, { mode, pointLimit }) {
+	const id = mintRoomId();
+	const room = new Room({ id, host, mode, pointLimit });
+	byId.set(id, room);
+	room.broadcastState();
+	broadcastLobbyUpdate();
+	return room;
+}
+
+export function destroyRoom(room) {
+	byId.delete(room.id);
+	broadcastLobbyUpdate();
+}
+
+export function getRoom(id) {
+	return byId.get(id) ?? null;
+}
+
+export function subscribeLobby(player) {
+	lobbySubscribers.add(player);
+	sendLobbySnapshotTo(player);
+}
+
+export function unsubscribeLobby(player) {
+	lobbySubscribers.delete(player);
+}
+
+function sendLobbySnapshotTo(player) {
+	player.send(lobbyUpdate({
+		full: true,
+		rooms: [...byId.values()].map(r => r.summary()),
+	}));
+}
+
+function broadcastLobbyUpdate() {
+	for (const p of lobbySubscribers) sendLobbySnapshotTo(p);
+}
+
+function mintRoomId() {
+	for (let attempt = 0; attempt < 100; attempt++) {
+		const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+		const n   = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+		const id = `${adj}-${n}-${Math.floor(Math.random() * 1000)}`;
+		if (!byId.has(id)) return id;
+	}
+	throw new Error('mintRoomId: failed to find a unique id');
+}
+
+// Test-only: reset everything between specs.
+export function _resetRooms() {
+	byId.clear();
+	lobbySubscribers.clear();
+}
