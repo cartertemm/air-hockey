@@ -146,9 +146,11 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 	function onServerMessage(msg) {
 		switch (msg.type) {
 			case MSG.WELCOME:
-				welcomeSeen = true;
 				setIdentityFromWelcome(msg);
-				go(screenOnlineMenu());
+				if (!welcomeSeen) {
+					welcomeSeen = true;
+					go(screenOnlineMenu());
+				}
 				break;
 			// Room/lobby/error handling lands in the next plan increment.
 			default:

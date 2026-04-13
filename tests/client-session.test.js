@@ -121,6 +121,26 @@ describe('session: connect flow', () => {
 		expect(root.querySelector('h1').textContent).toBe('Connection failed');
 	});
 
+	test('second welcome updates identity but does not re-render the online menu', async () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const factory = makeFakeClient();
+		startSession({ root, createClient: factory, isIOS: () => false });
+		root.querySelector('button').click(); // Connect
+		await Promise.resolve();
+		factory.fireMessage({
+			type: MSG.WELCOME,
+			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
+		});
+		const headingBefore = root.querySelector('h1');
+		factory.fireMessage({
+			type: MSG.WELCOME,
+			clientId: 'c1', sessionToken: 't2', name: 'A', resumed: true,
+		});
+		const headingAfter = root.querySelector('h1');
+		expect(headingAfter).toBe(headingBefore);
+	});
+
 	test('Cancel during connecting returns to offline main menu', () => {
 		const root = setupRoot();
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
