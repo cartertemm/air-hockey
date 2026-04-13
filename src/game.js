@@ -12,8 +12,8 @@ import {
 	TABLE_LENGTH,
 	MALLET_RADIUS,
 } from './physics.js';
-import { isDown, on as onKey } from './input/keyboard.js';
 import { on as onTouch, fingerCount } from './input/touch.js';
+import { InputHandler } from './input/inputHandler.js';
 
 const PHYSICS_DT        = 1 / 120;  // seconds per tick
 const MALLET_SPEED_BASE = 24;        // in/s
@@ -71,6 +71,7 @@ export class Game {
 
 		this.emitter = new EventEmitter();
 		this.sm = new GameStateMachine({ pointLimit, bestOf }, this.emitter);
+		this.input = new InputHandler();
 
 		this.physicsState = {
 			puck: createPuck(),
@@ -111,8 +112,7 @@ export class Game {
 	// ── Input wiring ────────────────────────────────────────────────────────────
 
 	_wireInput() {
-		// ── Touch: 1-finger mallet control ──────────────────────────────────────
-
+		// Raw touch drives continuous mallet position; InputHandler handles the rest.
 		onTouch('touchstart', (event) => {
 			// Only track a finger if none is already driving the mallet
 			// and this is the only finger currently on screen.
@@ -150,29 +150,19 @@ export class Game {
 			}
 		});
 
-		// ── Gestures → state machine ────────────────────────────────────────────
-
-		onTouch('tap', (event) => {
-			const { fingerCount: fingers, tapCount } = event;
-			if (fingers === 2 && tapCount === 1) {
-				if (this.sm.state === State.PAUSED) this.sm.resume();
-				else this.sm.pause();
-			} else if (fingers === 2 && tapCount === 2) {
-				this.sm.requestForfeit();
-			} else if (fingers === 3 && tapCount === 1) {
-				this.sm.readScore();
-			}
-		});
-
-		// ── Keyboard: latch mallet on first arrow key ───────────────────────────
-
-		onKey('keydown', (event) => {
-			const arrows = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
-			if (!this._keyboardLatch && arrows.includes(event.key.toLowerCase())) {
-				this._keyboardLatch = true;
-				this.physicsState.mallets[this.localPlayer].onTable = true;
-			}
-		});
+		const ih = this.input;
+		ih.bind('moveLeft',  { hold: ['arrowleft']  });
+		ih.bind('moveRight', { hold: ['arrowright'] });
+		ih.bind('moveUp',    { hold: ['arrowup']    });
+		ih.bind('moveDown',  { hold: ['arrowdown']  });
+		ih.bind('moveFast',  { hold: ['control']    });
+		ih.bind('latchMallet', { press: ['arrowleft', 'arrowright', 'arrowup', 'arrowdown'] });
+		ih.bind('pauseToggle', { tap: [{ fingerCount: 2, tapCount: 1 }] });
+		ih.bind('forfeit',     { tap: [{ fingerCount: 2, tapCount: 2 }] });
+		ih.bind('readScore',   { tap: [{ fingerCount: 3, tapCount: 1 }] });
+		ih.on('pauseToggle', () => this.sm.state === State.PAUSED ? this.sm.resume() : this.sm.pause());
+		ih.on('forfeit',   () => this.sm.requestForfeit());
+		ih.on('readScore', () => this.sm.readScore());
 	}
 
 	_applyTouchPosition(screenX, screenY) {
@@ -237,10 +227,11 @@ export class Game {
 
 		const { sm, physicsState, emitter, localPlayer } = this;
 
-		// Apply keyboard movement to local mallet
-		if (this._keyboardLatch) {
-			this._applyKeyboard(localPlayer, dt);
+		if (!this._keyboardLatch && this.input.wasTriggered('latchMallet')) {
+			this._keyboardLatch = true;
+			physicsState.mallets[localPlayer].onTable = true;
 		}
+		if (this._keyboardLatch) this._applyKeyboard(localPlayer, dt);
 
 		// Derive mallet velocity from position delta for collision response.
 		// Works uniformly for both touch (position set by events) and keyboard
@@ -262,22 +253,15 @@ export class Game {
 	// Updates local mallet position based on currently held arrow keys.
 	// Exported separately for unit testing.
 	_applyKeyboard(player, dt) {
-		let dx = 0, dy = 0;
-		if (isDown('arrowleft'))  dx -= 1;
-		if (isDown('arrowright')) dx += 1;
-		if (isDown('arrowup'))    dy += 1;
-		if (isDown('arrowdown'))  dy -= 1;
-
+		const ih = this.input;
+		const dx = (ih.wasTriggered('moveRight') ? 1 : 0) - (ih.wasTriggered('moveLeft') ? 1 : 0);
+		const dy = (ih.wasTriggered('moveUp')    ? 1 : 0) - (ih.wasTriggered('moveDown') ? 1 : 0);
 		if (dx === 0 && dy === 0) return;
-
-		const speed = isDown('control') ? MALLET_SPEED_FAST : MALLET_SPEED_BASE;
-		const len   = Math.hypot(dx, dy);
-		const moveX = (dx / len) * speed * dt;
-		const moveY = (dy / len) * speed * dt;
-
+		const speed = ih.wasTriggered('moveFast') ? MALLET_SPEED_FAST : MALLET_SPEED_BASE;
+		const len = Math.hypot(dx, dy);
 		const m = this.physicsState.mallets[player];
 		const b = Y_BOUNDS[player];
-		m.x = clamp(m.x + moveX, MALLET_RADIUS, TABLE_WIDTH - MALLET_RADIUS);
-		m.y = clamp(m.y + moveY, b.min, b.max);
+		m.x = clamp(m.x + (dx / len) * speed * dt, MALLET_RADIUS, TABLE_WIDTH - MALLET_RADIUS);
+		m.y = clamp(m.y + (dy / len) * speed * dt, b.min, b.max);
 	}
 }
