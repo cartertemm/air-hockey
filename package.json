@@ -4,18 +4,21 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "vite",
-		"build": "vite build",
-		"preview": "vite preview",
-		"test": "vitest run",
+		"dev":        "vite",
+		"server":     "node server/index.js",
+		"start":      "npm run server",
+		"build":      "vite build",
+		"preview":    "vite preview",
+		"test":       "vitest run",
 		"test:watch": "vitest"
 	},
 	"dependencies": {
-		"cacophony": "^0.18.3"
+		"cacophony": "^0.18.3",
+		"ws": "^8.20.0"
 	},
 	"devDependencies": {
+		"happy-dom": "^13.0.0",
 		"vite": "^5.0.0",
-		"vitest": "^1.0.0",
-		"happy-dom": "^13.0.0"
+		"vitest": "^1.0.0"
 	}
 }
