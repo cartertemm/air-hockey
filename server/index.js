@@ -2,6 +2,7 @@ import https from 'node:https';
 import fs from 'node:fs';
 import { WebSocketServer } from 'ws';
 import { CONFIG } from './config.js';
+import { handleConnection } from './handshake.js';
 
 function readCertsOrExit() {
 	if (!fs.existsSync(CONFIG.CERT_PATH) || !fs.existsSync(CONFIG.KEY_PATH)) {
@@ -19,8 +20,7 @@ const server = https.createServer(tls);
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', socket => {
-	console.log('[ws] client connected');
-	socket.on('close', () => console.log('[ws] client disconnected'));
+	handleConnection(socket);
 });
 
 server.listen(CONFIG.PORT, () => {
