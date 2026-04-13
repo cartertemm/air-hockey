@@ -140,6 +140,7 @@ export function handleConnection(rawSocket) {
 
 	function onClose() {
 		if (!player) return;
+		unsubscribeLobby(player);
 		player.detachSocket();
 		player.room?.onMemberDisconnected(player);
 	}

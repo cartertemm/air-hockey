@@ -133,4 +133,20 @@ describe('handleConnection: disconnect lifecycle', () => {
 		expect(p).not.toBeNull();
 		expect(p.isConnected()).toBe(false);
 	});
+
+	test('closing the socket removes the player from lobby subscribers', () => {
+		const sock = makeFakeSocket();
+		handleConnection(sock);
+		sendHello(sock, { name: 'x' });
+		sock.emit('message', { data: JSON.stringify({ type: MSG.LOBBY_SUBSCRIBE }) });
+		sock.close();
+		// After close, a subsequent room creation should NOT deliver a lobby update
+		// to the closed socket.
+		const sentBefore = sock.sent.length;
+		const sock2 = makeFakeSocket();
+		handleConnection(sock2);
+		sendHello(sock2, { name: 'y' });
+		sock2.emit('message', { data: JSON.stringify({ type: MSG.ROOM_CREATE, mode: 'single', pointLimit: 7 }) });
+		expect(sock.sent.length).toBe(sentBefore);
+	});
 });
