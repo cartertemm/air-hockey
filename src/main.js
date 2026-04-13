@@ -38,7 +38,14 @@ onTouch('swipe', event => {
 	ensureSound();
 });
 
-onTouch('tap', () => {
-	speak('Tap');
+function tapCountWord(n) {
+	const words = { 1: '', 2: 'double ', 3: 'triple ' };
+	return words[n] ?? `${n}-`;
+}
+
+onTouch('tap', event => {
+	const finger = event.fingerCount > 1 ? `${numberWord(event.fingerCount)} finger ` : '';
+	const count = tapCountWord(event.tapCount);
+	speak(`${finger}${count}tap`);
 	ensureSound();
 });

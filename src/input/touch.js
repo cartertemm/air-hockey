@@ -4,6 +4,9 @@ const DEFAULTS = {
 	tapMaxDuration: 300,
 	swipeMinDistance: 30,
 	swipeMaxDuration: 500,
+	multiTapWindow: 250,
+	multiTapMaxDistance: 40,
+	maxTapCount: 3,
 };
 
 const fingers = new Map();
@@ -21,6 +24,8 @@ let boundTarget = null;
 let gestureStartTime = 0;
 let gesturePeakFingerCount = 0;
 const gestureFingers = new Map();
+
+let pendingTap = null;
 
 function emit(name, payload) {
 	for (const fn of handlers[name]) fn(payload);
@@ -82,6 +87,47 @@ function release(touch) {
 	fingers.delete(touch.identifier);
 }
 
+function emitPendingTap() {
+	if (!pendingTap) return;
+	const { fingerCount, x, y, tapCount } = pendingTap;
+	pendingTap = null;
+	emit('tap', { fingerCount, tapCount, x, y });
+}
+
+function flushPendingTap() {
+	if (!pendingTap) return;
+	clearTimeout(pendingTap.timer);
+	emitPendingTap();
+}
+
+function handleTapGesture({ fingerCount, x, y }) {
+	if (pendingTap
+		&& pendingTap.fingerCount === fingerCount
+		&& Math.hypot(x - pendingTap.x, y - pendingTap.y) < options.multiTapMaxDistance) {
+		clearTimeout(pendingTap.timer);
+		pendingTap.tapCount += 1;
+		pendingTap.x = x;
+		pendingTap.y = y;
+		if (pendingTap.tapCount >= options.maxTapCount) {
+			emitPendingTap();
+			return;
+		}
+		pendingTap.timer = setTimeout(emitPendingTap, options.multiTapWindow);
+		return;
+	}
+	if (pendingTap) {
+		clearTimeout(pendingTap.timer);
+		emitPendingTap();
+	}
+	pendingTap = {
+		fingerCount,
+		x,
+		y,
+		tapCount: 1,
+		timer: setTimeout(emitPendingTap, options.multiTapWindow),
+	};
+}
+
 function evaluateGesture() {
 	if (gestureFingers.size === 0) return;
 	const participants = Array.from(gestureFingers.values());
@@ -104,22 +150,22 @@ function evaluateGesture() {
 		const direction = Math.abs(dx) > Math.abs(dy)
 			? (dx > 0 ? 'right' : 'left')
 			: (dy > 0 ? 'down' : 'up');
+		flushPendingTap();
 		emit('swipe', {
 			direction,
 			fingerCount: gesturePeakFingerCount,
 			distance,
 			duration,
 		});
-	} else {
-		for (const p of participants) {
-			const pdx = p.endX - p.startX;
-			const pdy = p.endY - p.startY;
-			const pDistance = Math.hypot(pdx, pdy);
-			const pDuration = performance.now() - p.startTime;
-			if (pDistance < options.tapMaxDistance && pDuration < options.tapMaxDuration) {
-				emit('tap', { x: p.endX, y: p.endY });
-			}
-		}
+		return;
+	}
+
+	if (distance < options.tapMaxDistance && duration < options.tapMaxDuration) {
+		handleTapGesture({
+			fingerCount: gesturePeakFingerCount,
+			x: endCentroid.x,
+			y: endCentroid.y,
+		});
 	}
 }
 
@@ -151,6 +197,10 @@ export function initTouch(userOptions = {}) {
 
 	fingers.clear();
 	resetGesture();
+	if (pendingTap) {
+		clearTimeout(pendingTap.timer);
+		pendingTap = null;
+	}
 
 	if (initialized && boundTarget === target) return;
 	if (initialized) {

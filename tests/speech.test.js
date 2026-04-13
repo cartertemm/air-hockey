@@ -82,7 +82,7 @@ describe('speech: speak (aria)', () => {
 		expect(document.getElementById('sr-polite').textContent).toBe('');
 	});
 
-	test('clears region text after 150ms so same string can re-announce', async () => {
+	test('clears region text after 100ms so same string can re-announce', async () => {
 		speak('again');
 		expect(document.getElementById('sr-polite').textContent).toBe('again');
 		await new Promise(r => setTimeout(r, 200));

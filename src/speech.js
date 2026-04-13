@@ -6,7 +6,7 @@ export const SPEECH_MODE_TTS  = 'tts';
 export const SPEECH_MODE_BOTH = 'both';
 
 const VALID_MODES = new Set([SPEECH_MODE_ARIA, SPEECH_MODE_TTS, SPEECH_MODE_BOTH]);
-const CLEAR_DELAY_MS = 150;
+const CLEAR_DELAY_MS = 100;
 
 let politeRegion = null;
 let assertiveRegion = null;
