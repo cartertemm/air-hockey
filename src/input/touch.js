@@ -18,12 +18,27 @@ let options = { ...DEFAULTS };
 let initialized = false;
 let boundTarget = null;
 
+let gestureStartTime = 0;
+let gesturePeakFingerCount = 0;
+const gestureFingers = new Map();
+
 function emit(name, payload) {
 	for (const fn of handlers[name]) fn(payload);
 }
 
+function resetGesture() {
+	gestureStartTime = 0;
+	gesturePeakFingerCount = 0;
+	gestureFingers.clear();
+}
+
 function record(touch) {
 	const now = performance.now();
+	if (fingers.size === 0) {
+		gestureFingers.clear();
+		gesturePeakFingerCount = 0;
+		gestureStartTime = now;
+	}
 	fingers.set(touch.identifier, {
 		x: touch.clientX,
 		y: touch.clientY,
@@ -31,6 +46,17 @@ function record(touch) {
 		startY: touch.clientY,
 		startTime: now,
 	});
+	gestureFingers.set(touch.identifier, {
+		id: touch.identifier,
+		startX: touch.clientX,
+		startY: touch.clientY,
+		endX: touch.clientX,
+		endY: touch.clientY,
+		startTime: now,
+	});
+	if (fingers.size > gesturePeakFingerCount) {
+		gesturePeakFingerCount = fingers.size;
+	}
 }
 
 function update(touch) {
@@ -38,28 +64,63 @@ function update(touch) {
 	if (!f) return;
 	f.x = touch.clientX;
 	f.y = touch.clientY;
+	const gf = gestureFingers.get(touch.identifier);
+	if (gf) {
+		gf.endX = touch.clientX;
+		gf.endY = touch.clientY;
+	}
 }
 
 function release(touch) {
 	const f = fingers.get(touch.identifier);
 	if (!f) return;
-	const endX = touch.clientX;
-	const endY = touch.clientY;
-	const dx = endX - f.startX;
-	const dy = endY - f.startY;
+	const gf = gestureFingers.get(touch.identifier);
+	if (gf) {
+		gf.endX = touch.clientX;
+		gf.endY = touch.clientY;
+	}
+	fingers.delete(touch.identifier);
+}
+
+function evaluateGesture() {
+	if (gestureFingers.size === 0) return;
+	const participants = Array.from(gestureFingers.values());
+	let sumStartX = 0, sumStartY = 0, sumEndX = 0, sumEndY = 0;
+	for (const p of participants) {
+		sumStartX += p.startX;
+		sumStartY += p.startY;
+		sumEndX += p.endX;
+		sumEndY += p.endY;
+	}
+	const n = participants.length;
+	const startCentroid = { x: sumStartX / n, y: sumStartY / n };
+	const endCentroid = { x: sumEndX / n, y: sumEndY / n };
+	const dx = endCentroid.x - startCentroid.x;
+	const dy = endCentroid.y - startCentroid.y;
 	const distance = Math.hypot(dx, dy);
-	const duration = performance.now() - f.startTime;
+	const duration = performance.now() - gestureStartTime;
 
 	if (distance > options.swipeMinDistance && duration < options.swipeMaxDuration) {
 		const direction = Math.abs(dx) > Math.abs(dy)
 			? (dx > 0 ? 'right' : 'left')
 			: (dy > 0 ? 'down' : 'up');
-		emit('swipe', { direction, distance, duration });
-	} else if (distance < options.tapMaxDistance && duration < options.tapMaxDuration) {
-		emit('tap', { x: endX, y: endY });
+		emit('swipe', {
+			direction,
+			fingerCount: gesturePeakFingerCount,
+			distance,
+			duration,
+		});
+	} else {
+		for (const p of participants) {
+			const pdx = p.endX - p.startX;
+			const pdy = p.endY - p.startY;
+			const pDistance = Math.hypot(pdx, pdy);
+			const pDuration = performance.now() - p.startTime;
+			if (pDistance < options.tapMaxDistance && pDuration < options.tapMaxDuration) {
+				emit('tap', { x: p.endX, y: p.endY });
+			}
+		}
 	}
-
-	fingers.delete(touch.identifier);
 }
 
 function onStart(event) {
@@ -78,11 +139,18 @@ function onEnd(event) {
 	event.preventDefault?.();
 	for (const t of event.changedTouches) release(t);
 	emit('touchend', event);
+	if (fingers.size === 0) {
+		evaluateGesture();
+		resetGesture();
+	}
 }
 
 export function initTouch(userOptions = {}) {
 	options = { ...DEFAULTS, ...userOptions };
 	const target = options.target ?? document.body;
+
+	fingers.clear();
+	resetGesture();
 
 	if (initialized && boundTarget === target) return;
 	if (initialized) {

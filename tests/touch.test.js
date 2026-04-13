@@ -58,6 +58,7 @@ describe('touch', () => {
 		dispatchTouch('touchend', [], [makeTouch(1, 200, 105)]);
 		expect(swipes.length).toBe(1);
 		expect(swipes[0].direction).toBe('right');
+		expect(swipes[0].fingerCount).toBe(1);
 	});
 
 	test('swipe left detected', async () => {
@@ -95,5 +96,47 @@ describe('touch', () => {
 		dispatchTouch('touchend', [], [makeTouch(1, 108, 100)]);
 		expect(swipes.length).toBe(1);
 		expect(swipes[0].direction).toBe('right');
+	});
+
+	test('three-finger swipe right emits one event with fingerCount 3', async () => {
+		const swipes = [];
+		on('swipe', e => swipes.push(e));
+		dispatchTouch('touchstart', [makeTouch(1, 100, 100), makeTouch(2, 100, 150), makeTouch(3, 100, 200)]);
+		await new Promise(r => setTimeout(r, 50));
+		dispatchTouch('touchend', [], [makeTouch(1, 200, 100), makeTouch(2, 200, 150), makeTouch(3, 200, 200)]);
+		expect(swipes.length).toBe(1);
+		expect(swipes[0].direction).toBe('right');
+		expect(swipes[0].fingerCount).toBe(3);
+	});
+
+	test('staggered touchstarts still count toward peak fingerCount', async () => {
+		const swipes = [];
+		on('swipe', e => swipes.push(e));
+		dispatchTouch('touchstart', [makeTouch(1, 100, 100)]);
+		await new Promise(r => setTimeout(r, 10));
+		dispatchTouch('touchstart', [makeTouch(1, 100, 100), makeTouch(2, 100, 150)]);
+		await new Promise(r => setTimeout(r, 10));
+		dispatchTouch('touchstart', [makeTouch(1, 100, 100), makeTouch(2, 100, 150), makeTouch(3, 100, 200)]);
+		await new Promise(r => setTimeout(r, 30));
+		dispatchTouch('touchend', [], [
+			makeTouch(1, 200, 100),
+			makeTouch(2, 200, 150),
+			makeTouch(3, 200, 200),
+		]);
+		expect(swipes.length).toBe(1);
+		expect(swipes[0].fingerCount).toBe(3);
+		expect(swipes[0].direction).toBe('right');
+	});
+
+	test('two-finger short non-swipe gesture does not fire swipe', async () => {
+		const swipes = [];
+		const taps = [];
+		on('swipe', e => swipes.push(e));
+		on('tap', e => taps.push(e));
+		dispatchTouch('touchstart', [makeTouch(1, 100, 100), makeTouch(2, 150, 100)]);
+		await new Promise(r => setTimeout(r, 50));
+		dispatchTouch('touchend', [], [makeTouch(1, 102, 101), makeTouch(2, 151, 101)]);
+		expect(swipes.length).toBe(0);
+		expect(taps.length).toBe(2);
 	});
 });

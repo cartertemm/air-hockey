@@ -27,8 +27,14 @@ onKey('keypress', event => {
 	ensureSound();
 });
 
+function numberWord(n) {
+	const words = { 2: 'two', 3: 'three', 4: 'four', 5: 'five' };
+	return words[n] ?? String(n);
+}
+
 onTouch('swipe', event => {
-	speak(`Swipe ${event.direction}`, true);
+	const prefix = event.fingerCount > 1 ? `${numberWord(event.fingerCount)} finger ` : '';
+	speak(`${prefix}swipe ${event.direction}`, true);
 	ensureSound();
 });
 
