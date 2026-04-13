@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { handleConnection } from '../server/handshake.js';
 import { _resetPlayers, lookup } from '../server/player.js';
 import { _resetRooms, createRoom } from '../server/room.js';
@@ -148,5 +148,26 @@ describe('handleConnection: disconnect lifecycle', () => {
 		sendHello(sock2, { name: 'y' });
 		sock2.emit('message', { data: JSON.stringify({ type: MSG.ROOM_CREATE, mode: 'single', pointLimit: 7 }) });
 		expect(sock.sent.length).toBe(sentBefore);
+	});
+});
+
+describe('handleConnection: hello timeout', () => {
+	beforeEach(() => { vi.useFakeTimers(); });
+	afterEach(() => { vi.useRealTimers(); });
+
+	test('closes socket if no hello arrives within the timeout', () => {
+		const sock = makeFakeSocket();
+		handleConnection(sock);
+		expect(sock.readyState).toBe(1);
+		vi.advanceTimersByTime(5000);
+		expect(sock.readyState).toBe(3);
+	});
+
+	test('does NOT close if hello arrives in time', () => {
+		const sock = makeFakeSocket();
+		handleConnection(sock);
+		sendHello(sock, { name: 'x' });
+		vi.advanceTimersByTime(10_000);
+		expect(sock.readyState).toBe(1);
 	});
 });

@@ -1,4 +1,6 @@
 import { wrapSocket } from '../network/transport.js';
+
+const HELLO_TIMEOUT_MS = 5000;
 import {
 	MSG,
 	ERR,
@@ -22,6 +24,14 @@ import {
 export function handleConnection(rawSocket) {
 	let player = null;
 	let wrapped = null;
+	let helloTimer = null;
+
+	function clearHelloTimer() {
+		if (helloTimer !== null) {
+			clearTimeout(helloTimer);
+			helloTimer = null;
+		}
+	}
 
 	function sendError(code, message = code) {
 		wrapped?.send(errorMsg({ code, message }));
@@ -39,6 +49,7 @@ export function handleConnection(rawSocket) {
 	}
 
 	function handleHello(msg) {
+		clearHelloTimer();
 		if (msg.type !== MSG.HELLO) {
 			sendError(ERR.BAD_MESSAGE, 'expected hello');
 			wrapped.close();
@@ -139,6 +150,7 @@ export function handleConnection(rawSocket) {
 	}
 
 	function onClose() {
+		clearHelloTimer();
 		if (!player) return;
 		unsubscribeLobby(player);
 		player.detachSocket();
@@ -146,4 +158,8 @@ export function handleConnection(rawSocket) {
 	}
 
 	wrapped = wrapSocket(rawSocket, { onMessage, onClose, onError: () => {} });
+	helloTimer = setTimeout(() => {
+		if (!player) wrapped.close();
+	}, HELLO_TIMEOUT_MS);
+	helloTimer?.unref?.();
 }
