@@ -4,6 +4,19 @@ import { renderScreen } from './ui.js';
 import { createClient as realCreateClient } from './net/client.js';
 import { isIOSStandalone } from './platform.js';
 import {
+	speak,
+	getSpeechMode,
+	setSpeechMode,
+	getVoices,
+	getVoice,
+	setVoice,
+	getRate,
+	setRate,
+	getPitch,
+	setPitch,
+} from './speech.js';
+import { randomFact } from './airHockeyFacts.js';
+import {
 	MSG,
 	hello,
 	roomCreate,
@@ -104,7 +117,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 				connected: false,
 				onConnect:       () => go(screenConnecting()),
 				onTestSpeakers:  () => go(screenTestSpeakers(false)),
-				onSettings:      () => go(screenStubSettings(false)),
+				onSettings:      () => go(screenSettings(false)),
 			},
 		};
 	}
@@ -119,7 +132,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 				onCreate:        () => { /* TODO: createGame screen — not in this task */ },
 				onJoin:          () => { /* TODO: joinGame screen — not in this task */ },
 				onTestSpeakers:  () => go(screenTestSpeakers(true)),
-				onSettings:      () => go(screenStubSettings(true)),
+				onSettings:      () => go(screenSettings(true)),
 				onDisconnect:    () => {
 					const c = client;
 					client = null;
@@ -209,11 +222,48 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 		};
 	}
 
-	function screenStubSettings(wasOnline) {
+	function screenSettings(wasOnline, focusField = 'name') {
 		const back = () => go(wasOnline ? screenOnlineMenu() : screenOfflineMenu());
+		const onIOS = isIOS();
+		const subscribeVoicesChanged = (handler) => {
+			if (typeof speechSynthesis === 'undefined' ||
+				typeof speechSynthesis.addEventListener !== 'function') {
+				return () => {};
+			}
+			const wrapped = () => handler(speechSynthesis.getVoices());
+			speechSynthesis.addEventListener('voiceschanged', wrapped);
+			return () => speechSynthesis.removeEventListener('voiceschanged', wrapped);
+		};
 		return {
-			screen: 'stubSettings',
-			props: { onBack: back },
+			screen: 'settings',
+			props: {
+				name: getIdentity().name ?? '',
+				isIOS: onIOS,
+				mode: getSpeechMode(),
+				voices: getVoices(),
+				voiceURI: getVoice()?.voiceURI ?? null,
+				rate: getRate(),
+				pitch: getPitch(),
+				focusField,
+				subscribeVoicesChanged,
+				onNameSave: (value) => {
+					const trimmed = (value ?? '').trim();
+					if (trimmed.length === 0) return;
+					setDisplayName(trimmed);
+				},
+				generateName,
+				onModeChange: (mode) => {
+					setSpeechMode(mode);
+					go(screenSettings(wasOnline, `mode-${mode}`));
+				},
+				onVoiceChange: (voiceURI) => {
+					if (voiceURI) setVoice(voiceURI);
+				},
+				onRateChange: (value) => setRate(value),
+				onPitchChange: (value) => setPitch(value),
+				onTestVoice: () => speak(randomFact(), true),
+				onBack: back,
+			},
 			onEscape: back,
 		};
 	}

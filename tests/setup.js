@@ -5,10 +5,14 @@ class MockUtterance {
 	}
 }
 
-class MockSpeechSynthesis {
+// Extends EventTarget so the Settings screen's voiceschanged subscription
+// can be exercised in tests via dispatchEvent(new Event('voiceschanged')).
+class MockSpeechSynthesis extends EventTarget {
 	constructor() {
+		super();
 		this.spoken = [];
 		this.cancelCalls = 0;
+		this.voices = [];
 	}
 	speak(utterance) {
 		this.spoken.push(utterance.text);
@@ -16,9 +20,13 @@ class MockSpeechSynthesis {
 	cancel() {
 		this.cancelCalls += 1;
 	}
+	getVoices() {
+		return this.voices;
+	}
 	reset() {
 		this.spoken = [];
 		this.cancelCalls = 0;
+		this.voices = [];
 	}
 }
 

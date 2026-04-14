@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { startSession } from '../src/session.js';
-import { setIdentityFromWelcome, clearIdentity } from '../src/identity.js';
+import { setIdentityFromWelcome, getIdentity, clearIdentity } from '../src/identity.js';
+import { getSpeechMode, setSpeechMode, getRate, getPitch, getVoice, SPEECH_MODE_TTS } from '../src/speech.js';
 import { MSG } from 'network/protocol.js';
 
 function makeFakeClient() {
@@ -304,6 +305,166 @@ describe('session: Escape goes back', () => {
 		expect(root.querySelector('h1').textContent).toBe('Test speakers');
 		dispatchEscape(root);
 		expect(root.querySelector('h1').textContent).toBe('Test speakers');
+	});
+});
+
+describe('session: settings screen', () => {
+	function openSettings(root) {
+		[...root.querySelectorAll('button')]
+			.find(b => b.textContent === 'Configure settings')
+			.click();
+	}
+
+	test('opening settings from offline menu shows the settings screen with name field', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		openSettings(root);
+		expect(root.querySelector('h1').textContent).toBe('Configure settings');
+		expect(root.querySelector('#settings-name')).toBeTruthy();
+		expect(root.querySelector('#settings-name').value).toBe('A');
+	});
+
+	test('Back button returns to the offline menu', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		openSettings(root);
+		[...root.querySelectorAll('button')].find(b => b.textContent === 'Back').click();
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('typing a name and blurring saves it via setDisplayName', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'Old' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		openSettings(root);
+		const input = root.querySelector('#settings-name');
+		input.value = 'New Name';
+		input.dispatchEvent(new Event('blur'));
+		expect(getIdentity().name).toBe('New Name');
+	});
+
+	test('blank name on blur is a no-op', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'Old' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		openSettings(root);
+		const input = root.querySelector('#settings-name');
+		input.value = '   ';
+		input.dispatchEvent(new Event('blur'));
+		expect(getIdentity().name).toBe('Old');
+	});
+
+	test('Generate name button persists a random name and refocuses the input', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'Original' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		openSettings(root);
+		const input = root.querySelector('#settings-name');
+		const generate = [...root.querySelectorAll('button')].find(b => b.textContent === 'Generate name');
+		generate.click();
+		const after = getIdentity().name;
+		expect(after).not.toBe('Original');
+		expect(after).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+		expect(input.value).toBe(after);
+		expect(document.activeElement).toBe(input);
+	});
+
+	test('switching to TTS on desktop reveals voice/rate/pitch controls and persists the mode', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		openSettings(root);
+		expect(root.querySelector('#settings-voice')).toBeNull();
+		const ttsRadio = root.querySelector('#settings-mode-tts');
+		ttsRadio.checked = true;
+		ttsRadio.dispatchEvent(new Event('change', { bubbles: true }));
+		expect(getSpeechMode()).toBe('tts');
+		expect(root.querySelector('#settings-voice')).toBeTruthy();
+		expect(root.querySelector('#settings-rate')).toBeTruthy();
+		expect(root.querySelector('#settings-pitch')).toBeTruthy();
+	});
+
+	test('iOS opens settings without output mode radios', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		openSettings(root);
+		expect(root.querySelector('#settings-mode-aria')).toBeNull();
+		expect(root.querySelector('#settings-mode-tts')).toBeNull();
+		expect(root.querySelector('#settings-voice')).toBeTruthy();
+		expect(root.querySelector('#settings-rate')).toBeTruthy();
+		expect(root.querySelector('#settings-pitch')).toBeTruthy();
+	});
+
+	test('rate slider change persists via setRate', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		openSettings(root);
+		const slider = root.querySelector('#settings-rate');
+		slider.value = '1.4';
+		slider.dispatchEvent(new Event('change', { bubbles: true }));
+		expect(getRate()).toBeCloseTo(1.4);
+	});
+
+	test('pitch slider change persists via setPitch', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		openSettings(root);
+		const slider = root.querySelector('#settings-pitch');
+		slider.value = '0.6';
+		slider.dispatchEvent(new Event('change', { bubbles: true }));
+		expect(getPitch()).toBeCloseTo(0.6);
+	});
+
+	test('voice select change persists via setVoice', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		globalThis.speechSynthesis.voices = [
+			{ name: 'Alpha', voiceURI: 'a' },
+			{ name: 'Beta',  voiceURI: 'b' },
+		];
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		openSettings(root);
+		const select = root.querySelector('#settings-voice');
+		select.value = 'b';
+		select.dispatchEvent(new Event('change', { bubbles: true }));
+		expect(getVoice()?.voiceURI).toBe('b');
+	});
+
+	test('Test voice button speaks one of the air hockey facts', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		// The Test voice button only appears once the user is in TTS mode, so
+		// match that invariant here (iOS session default would normally force
+		// TTS, but speech.js reads navigator.standalone directly rather than
+		// the injected isIOS fake).
+		setSpeechMode(SPEECH_MODE_TTS);
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		openSettings(root);
+		[...root.querySelectorAll('button')].find(b => b.textContent === 'Test voice').click();
+		expect(globalThis.speechSynthesis.spoken.length).toBe(1);
+		expect(globalThis.speechSynthesis.spoken[0]).toMatch(/air hockey|puck|Brunswick|Cummings|USAA|mallet|tournament|Houston|Sega|air track/i);
+	});
+
+	test('voiceschanged event repopulates the voice select while on the settings screen', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		globalThis.speechSynthesis.voices = [];
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		openSettings(root);
+		const before = [...root.querySelectorAll('#settings-voice option')].map(o => o.textContent);
+		expect(before).toContain('(no voices available)');
+		globalThis.speechSynthesis.voices = [
+			{ name: 'Alpha', voiceURI: 'a' },
+			{ name: 'Beta',  voiceURI: 'b' },
+		];
+		globalThis.speechSynthesis.dispatchEvent(new Event('voiceschanged'));
+		const after = [...root.querySelectorAll('#settings-voice option')].map(o => o.textContent);
+		expect(after).toEqual(['Alpha', 'Beta']);
 	});
 });
 

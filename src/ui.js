@@ -183,12 +183,149 @@ const SCREENS = {
 		]);
 	},
 
-	stubSettings(root, props) {
+	settings(root, props) {
+		const showOutputMode = !props.isIOS;
+		const showVoiceControls = props.isIOS || props.mode === 'tts';
+		const focus = props.focusField ?? 'name';
+		// ---- Name field --------------------------------------------------
+		const nameInput = el('input', {
+			id: 'settings-name',
+			type: 'text',
+			value: props.name ?? '',
+			autoFocus: focus === 'name' ? true : undefined,
+		});
+		const commitName = () => props.onNameSave(nameInput.value);
+		nameInput.addEventListener('blur', commitName);
+		nameInput.addEventListener('keydown', (event) => {
+			if (event.key === 'Enter') {
+				event.preventDefault();
+				commitName();
+			}
+		});
+		const generateButton = el('button', {
+			type: 'button',
+			text: 'Generate name',
+			onClick: () => {
+				const newName = props.generateName();
+				nameInput.value = newName;
+				props.onNameSave(newName);
+				nameInput.focus();
+			},
+		});
+		const nameBlock = el('div', {},
+			el('label', { for: 'settings-name', text: 'Display name' }),
+			nameInput,
+			el('div', {}, el('span', { text: 'Feeling indecisive? ' }), generateButton),
+			el('p', { id: 'settings-name-help', text: 'Saves when you press Enter or move focus away. Leave blank to keep your current name.' }),
+		);
+		// ---- Output mode (desktop only) ----------------------------------
+		let modeBlock = null;
+		if (showOutputMode) {
+			const ariaRadio = el('input', {
+				type: 'radio', name: 'speech-mode', value: 'aria', id: 'settings-mode-aria',
+				checked: props.mode === 'aria' ? 'checked' : undefined,
+				autoFocus: focus === 'mode-aria' ? true : undefined,
+				onChange: (event) => { if (event.target.checked) props.onModeChange('aria'); },
+			});
+			const ttsRadio = el('input', {
+				type: 'radio', name: 'speech-mode', value: 'tts', id: 'settings-mode-tts',
+				checked: props.mode === 'tts' ? 'checked' : undefined,
+				autoFocus: focus === 'mode-tts' ? true : undefined,
+				onChange: (event) => { if (event.target.checked) props.onModeChange('tts'); },
+			});
+			modeBlock = el('fieldset', {},
+				el('legend', { text: 'Speech output' }),
+				el('label', { for: 'settings-mode-aria' }, ariaRadio, ' Screen reader'),
+				el('label', { for: 'settings-mode-tts' }, ttsRadio, ' Text to speech'),
+			);
+		}
+		// ---- Voice / rate / pitch / preview ------------------------------
+		let voiceBlock = null;
+		if (showVoiceControls) {
+			const select = el('select', {
+				id: 'settings-voice',
+				onChange: (event) => props.onVoiceChange(event.target.value),
+			});
+			function populateVoices(voices) {
+				select.innerHTML = '';
+				const known = voices.some(v => v.voiceURI === props.voiceURI);
+				if (props.voiceURI && !known) {
+					const opt = document.createElement('option');
+					opt.value = props.voiceURI;
+					opt.textContent = '(unknown voice)';
+					opt.disabled = true;
+					opt.selected = true;
+					select.appendChild(opt);
+				}
+				if (voices.length === 0 && !props.voiceURI) {
+					const opt = document.createElement('option');
+					opt.value = '';
+					opt.textContent = '(no voices available)';
+					opt.disabled = true;
+					opt.selected = true;
+					select.appendChild(opt);
+				}
+				for (const v of voices) {
+					const opt = document.createElement('option');
+					opt.value = v.voiceURI;
+					opt.textContent = v.name;
+					if (v.voiceURI === props.voiceURI) opt.selected = true;
+					select.appendChild(opt);
+				}
+			}
+			populateVoices(props.voices ?? []);
+			const fmt = (n) => Number(n).toFixed(1);
+			const rateInput = el('input', {
+				id: 'settings-rate', type: 'range',
+				min: '0.5', max: '2', step: '0.1',
+				value: String(props.rate),
+				'aria-valuetext': fmt(props.rate),
+				onChange: (event) => {
+					const v = parseFloat(event.target.value);
+					event.target.setAttribute('aria-valuetext', fmt(v));
+					props.onRateChange(v);
+				},
+				onInput: (event) => {
+					event.target.setAttribute('aria-valuetext', fmt(parseFloat(event.target.value)));
+				},
+			});
+			const pitchInput = el('input', {
+				id: 'settings-pitch', type: 'range',
+				min: '0.1', max: '2', step: '0.1',
+				value: String(props.pitch),
+				'aria-valuetext': fmt(props.pitch),
+				onChange: (event) => {
+					const v = parseFloat(event.target.value);
+					event.target.setAttribute('aria-valuetext', fmt(v));
+					props.onPitchChange(v);
+				},
+				onInput: (event) => {
+					event.target.setAttribute('aria-valuetext', fmt(parseFloat(event.target.value)));
+				},
+			});
+			voiceBlock = el('div', {},
+				el('label', { for: 'settings-voice', text: 'Voice' }),
+				select,
+				el('label', { for: 'settings-rate', text: 'Speech rate' }),
+				rateInput,
+				el('label', { for: 'settings-pitch', text: 'Speech pitch' }),
+				pitchInput,
+				// Settings is the one pre-game screen that calls speak() directly:
+				// the user is deliberately previewing TTS, so the "pre-game uses
+				// native screen reader" rule does not apply here.
+				el('button', { type: 'button', text: 'Test voice', onClick: props.onTestVoice }),
+			);
+			const unsub = props.subscribeVoicesChanged?.((newVoices) => populateVoices(newVoices));
+			if (typeof unsub === 'function') root.__cleanup = unsub;
+		}
+		const backButton = el('button', { type: 'button', text: 'Back', onClick: props.onBack });
 		mount(root, [
 			el('h1', { text: 'Configure settings' }),
-			el('p', { text: 'Not yet implemented.' }),
-			el('button', { text: 'Back', onClick: props.onBack, autoFocus: true }),
-		]);
+			nameBlock,
+			modeBlock,
+			voiceBlock,
+			backButton,
+		].filter(Boolean));
 	},
 };
 
@@ -203,6 +340,10 @@ export function renderScreen(root, id, props = {}) {
 			if (root.__keyHandler) {
 				window.removeEventListener('keydown', root.__keyHandler);
 				delete root.__keyHandler;
+			}
+			if (root.__cleanup) {
+				try { root.__cleanup(); } catch { /* ignore */ }
+				delete root.__cleanup;
 			}
 			root.innerHTML = '';
 		},
