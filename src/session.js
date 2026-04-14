@@ -71,10 +71,10 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 				onTestSpeakers:  () => go(screenStubSpeakers(true)),
 				onSettings:      () => go(screenStubSettings(true)),
 				onDisconnect:    () => {
-					client?.close();
+					const c = client;
 					client = null;
-					welcomeSeen = false;
 					go(screenOfflineMenu());
+					c?.close();
 				},
 			},
 		};
@@ -82,7 +82,12 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 
 	function screenConnecting() {
 		welcomeSeen = false;
-		client = createClient({
+		// Capture myClient so stale close handlers from abandoned connection
+		// attempts (disconnect, cancel, retry) can tell themselves apart from
+		// the current active client. Without this, a real WebSocket's async
+		// close event fires after we've already moved on, stale handlers see
+		// welcomeSeen=false, and the UI flashes connectFailed.
+		const myClient = createClient({
 			onOpen: (c) => {
 				const id = getIdentity();
 				c.send(hello({
@@ -93,17 +98,23 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 			},
 			onMessage: onServerMessage,
 			onClose: () => {
-				if (!welcomeSeen) go(screenConnectFailed());
+				if (client !== myClient) return;
+				if (welcomeSeen) return;
+				client = null;
+				myClient.close();
+				go(screenConnectFailed());
 			},
 			onError: () => {},
 		});
+		client = myClient;
 		return {
 			screen: 'connecting',
 			props: {
 				onCancel: () => {
-					client?.close();
+					const c = client;
 					client = null;
 					go(screenOfflineMenu());
+					c?.close();
 				},
 			},
 		};
@@ -114,14 +125,16 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 			screen: 'connectFailed',
 			props: {
 				onRetry: () => {
-					client?.close();
+					const c = client;
 					client = null;
 					go(screenConnecting());
+					c?.close();
 				},
 				onCancel: () => {
-					client?.close();
+					const c = client;
 					client = null;
 					go(screenOfflineMenu());
+					c?.close();
 				},
 			},
 		};

@@ -25,6 +25,31 @@ function makeFakeClient() {
 	return factory;
 }
 
+// Fake client that mirrors the real WebSocket's async close semantics:
+// calling .close() schedules the onClose event on the microtask queue
+// rather than firing it synchronously. Used to regression-test the
+// stale-close-handler race that real browsers exposed.
+function makeAsyncFakeClient() {
+	const handlers = {};
+	const client = {
+		sent: [],
+		closeCalled: false,
+		send(msg) { this.sent.push(msg); },
+		close() {
+			this.closeCalled = true;
+			queueMicrotask(() => handlers.onClose?.({}));
+		},
+	};
+	function factory(h) {
+		Object.assign(handlers, h);
+		queueMicrotask(() => handlers.onOpen?.(client));
+		return client;
+	}
+	factory.client = client;
+	factory.fireMessage = (msg) => handlers.onMessage?.(msg);
+	return factory;
+}
+
 function setupRoot() {
 	const root = document.createElement('main');
 	document.body.appendChild(root);
@@ -149,6 +174,44 @@ describe('session: connect flow', () => {
 		root.querySelector('button').click(); // Connect
 		// Cancel is autofocused; click the first button.
 		root.querySelector('button').click();
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+		expect(factory.client.closeCalled).toBe(true);
+	});
+});
+
+describe('session: async close timing (regression)', () => {
+	test('Disconnect does not flash connectFailed when close fires asynchronously', async () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const factory = makeAsyncFakeClient();
+		startSession({ root, createClient: factory, isIOS: () => false });
+		root.querySelector('button').click(); // Connect
+		await Promise.resolve(); // let onOpen drain
+		factory.fireMessage({
+			type: MSG.WELCOME,
+			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
+		});
+		const disconnect = [...root.querySelectorAll('button')].find(b => b.textContent === 'Disconnect');
+		disconnect.click();
+		// Drain any deferred onClose microtasks
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+		const labels = [...root.querySelectorAll('button')].map(b => b.textContent);
+		expect(labels[0]).toBe('Connect to server');
+		expect(factory.client.closeCalled).toBe(true);
+	});
+
+	test('Cancel during connecting does not flash connectFailed when close fires asynchronously', async () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const factory = makeAsyncFakeClient();
+		startSession({ root, createClient: factory, isIOS: () => false });
+		root.querySelector('button').click(); // Connect
+		// Cancel is autofocused first button on the connecting screen
+		root.querySelector('button').click();
+		await Promise.resolve();
+		await Promise.resolve();
 		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
 		expect(factory.client.closeCalled).toBe(true);
 	});
