@@ -33,6 +33,39 @@ async function playSpeakerTest() {
 	}
 }
 
+let notificationSoundsPromise = null;
+function loadNotificationSounds() {
+	if (notificationSoundsPromise) return notificationSoundsPromise;
+	if (typeof AudioContext === 'undefined' && typeof webkitAudioContext === 'undefined') {
+		notificationSoundsPromise = Promise.resolve(null);
+		return notificationSoundsPromise;
+	}
+	notificationSoundsPromise = (async () => {
+		const [sound, connectUrl, disconnectUrl] = await Promise.all([
+			import('./sound.js'),
+			import('../sounds/connect_notification.ogg?url'),
+			import('../sounds/disconnect_notification.ogg?url'),
+		]);
+		await sound.initSound();
+		const [connect, disconnect] = await Promise.all([
+			sound.loadSound(connectUrl.default),
+			sound.loadSound(disconnectUrl.default),
+		]);
+		return { play: sound.playSound, connect, disconnect };
+	})();
+	return notificationSoundsPromise;
+}
+
+async function playNotification(kind) {
+	try {
+		const sounds = await loadNotificationSounds();
+		if (!sounds) return;
+		sounds.play(kind === 'connect' ? sounds.connect : sounds.disconnect);
+	} catch (err) {
+		console.warn('notification sound failed', err);
+	}
+}
+
 // startSession accepts dependency overrides for tests. Call sites in app code
 // pass no options; tests inject createClient/isIOS fakes.
 export function startSession({ root, createClient = realCreateClient, isIOS = isIOSStandalone } = {}) {
@@ -90,6 +123,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 				onDisconnect:    () => {
 					const c = client;
 					client = null;
+					playNotification('disconnect');
 					go(screenOfflineMenu());
 					c?.close();
 				},
@@ -99,6 +133,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 
 	function screenConnecting() {
 		welcomeSeen = false;
+		loadNotificationSounds().catch(() => {});
 		// Capture myClient so stale close handlers from abandoned connection
 		// attempts (disconnect, cancel, retry) can tell themselves apart from
 		// the current active client. Without this, a real WebSocket's async
@@ -116,7 +151,10 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 			onMessage: onServerMessage,
 			onClose: () => {
 				if (client !== myClient) return;
-				if (welcomeSeen) return;
+				if (welcomeSeen) {
+					playNotification('disconnect');
+					return;
+				}
 				client = null;
 				myClient.close();
 				go(screenConnectFailed());
@@ -124,20 +162,26 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 			onError: () => {},
 		});
 		client = myClient;
+		const cancel = () => {
+			const c = client;
+			client = null;
+			go(screenOfflineMenu());
+			c?.close();
+		};
 		return {
 			screen: 'connecting',
-			props: {
-				onCancel: () => {
-					const c = client;
-					client = null;
-					go(screenOfflineMenu());
-					c?.close();
-				},
-			},
+			props: { onCancel: cancel },
+			onEscape: cancel,
 		};
 	}
 
 	function screenConnectFailed() {
+		const cancel = () => {
+			const c = client;
+			client = null;
+			go(screenOfflineMenu());
+			c?.close();
+		};
 		return {
 			screen: 'connectFailed',
 			props: {
@@ -147,30 +191,30 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 					go(screenConnecting());
 					c?.close();
 				},
-				onCancel: () => {
-					const c = client;
-					client = null;
-					go(screenOfflineMenu());
-					c?.close();
-				},
+				onCancel: cancel,
 			},
+			onEscape: cancel,
 		};
 	}
 
 	function screenTestSpeakers(wasOnline) {
+		const back = () => go(wasOnline ? screenOnlineMenu() : screenOfflineMenu());
 		return {
 			screen: 'testSpeakers',
 			props: {
 				onPlay: () => playSpeakerTest(),
-				onBack: () => go(wasOnline ? screenOnlineMenu() : screenOfflineMenu()),
+				onBack: back,
 			},
+			onEscape: back,
 		};
 	}
 
 	function screenStubSettings(wasOnline) {
+		const back = () => go(wasOnline ? screenOnlineMenu() : screenOfflineMenu());
 		return {
 			screen: 'stubSettings',
-			props: { onBack: () => go(wasOnline ? screenOnlineMenu() : screenOfflineMenu()) },
+			props: { onBack: back },
+			onEscape: back,
 		};
 	}
 
@@ -182,6 +226,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 				setIdentityFromWelcome(msg);
 				if (!welcomeSeen) {
 					welcomeSeen = true;
+					playNotification('connect');
 					go(screenOnlineMenu());
 				}
 				break;
@@ -193,6 +238,18 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 
 	// ---- Boot ------------------------------------------------------------
 
+	// Desktop Escape = "go back". Each screen builder that supports a back
+	// action sets onEscape on its returned record. iOS standalone is excluded
+	// because it has no physical Escape key and VoiceOver reserves Escape for
+	// rotor gestures. The listener is attached to root so it's GC'd along
+	// with the test root between vitest runs.
+	root.addEventListener('keydown', (event) => {
+		if (event.key !== 'Escape') return;
+		if (isIOS()) return;
+		if (!state?.onEscape) return;
+		event.preventDefault();
+		state.onEscape();
+	});
 	const { name } = getIdentity();
 	if (!name) go(screenNameEntry());
 	else go(screenOfflineMenu());

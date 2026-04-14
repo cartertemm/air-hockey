@@ -237,6 +237,76 @@ describe('session: offline stub screens', () => {
 	});
 });
 
+function dispatchEscape(root) {
+	root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+}
+
+describe('session: Escape goes back', () => {
+	test('Escape on Test speakers returns to offline menu', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		[...root.querySelectorAll('button')].find(b => b.textContent === 'Test speakers').click();
+		expect(root.querySelector('h1').textContent).toBe('Test speakers');
+		dispatchEscape(root);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('Escape on Configure settings returns to offline menu', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		[...root.querySelectorAll('button')].find(b => b.textContent === 'Configure settings').click();
+		expect(root.querySelector('h1').textContent).toBe('Configure settings');
+		dispatchEscape(root);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('Escape during connecting cancels and returns to offline menu', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const factory = makeFakeClient();
+		startSession({ root, createClient: factory, isIOS: () => false });
+		root.querySelector('button').click(); // Connect
+		expect(root.querySelector('h1').textContent).toBe('Connecting');
+		dispatchEscape(root);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+		expect(factory.client.closeCalled).toBe(true);
+	});
+
+	test('Escape on connectFailed returns to offline menu', async () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const factory = makeFakeClient();
+		startSession({ root, createClient: factory, isIOS: () => false });
+		root.querySelector('button').click(); // Connect
+		await Promise.resolve();
+		factory.fireClose({});
+		expect(root.querySelector('h1').textContent).toBe('Connection failed');
+		dispatchEscape(root);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('Escape on the offline main menu does nothing', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+		dispatchEscape(root);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('Escape is ignored on iOS', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		[...root.querySelectorAll('button')].find(b => b.textContent === 'Test speakers').click();
+		expect(root.querySelector('h1').textContent).toBe('Test speakers');
+		dispatchEscape(root);
+		expect(root.querySelector('h1').textContent).toBe('Test speakers');
+	});
+});
+
 describe('session: disconnect', () => {
 	test('Disconnect tears down client and returns to offline main menu', async () => {
 		const root = setupRoot();
