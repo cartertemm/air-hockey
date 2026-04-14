@@ -2,6 +2,10 @@ import crypto from 'node:crypto';
 
 // ---- Player instances ----------------------------------------------------
 
+// Player lifetime equals socket lifetime. A Player exists from HELLO until
+// its WebSocket closes; at that point it is removed from its room (if any)
+// and unregistered. There is no grace window, no resume, no reaper.
+
 export class Player {
 	constructor({ clientId, sessionToken, name, socket }) {
 		this.clientId = clientId;
@@ -9,26 +13,10 @@ export class Player {
 		this.name = name;
 		this.socket = socket;
 		this.room = null;
-		this.disconnectedAt = null;
 	}
 
 	send(msg) { this.socket?.send(msg); }
 	isConnected() { return this.socket !== null; }
-
-	attachSocket(socket) {
-		this.socket = socket;
-		this.disconnectedAt = null;
-	}
-
-	detachSocket() {
-		this.socket = null;
-		this.disconnectedAt = Date.now();
-	}
-
-	rotateToken() {
-		this.sessionToken = generateSecret();
-		return this.sessionToken;
-	}
 
 	toMemberSnapshot() {
 		return {
@@ -52,18 +40,6 @@ export function allPlayers()        { return byId.values(); }
 
 // Test-only: reset the registry between specs.
 export function _resetPlayers() { byId.clear(); }
-
-// ---- Reaper --------------------------------------------------------------
-
-// Pure over an injected clock + grace window so it's trivial to unit test.
-export function reapIdle({ now = Date.now(), graceMs } = {}) {
-	for (const p of byId.values()) {
-		if (p.isConnected()) continue;
-		if (p.room !== null) continue;
-		if (p.disconnectedAt === null) continue;
-		if (now - p.disconnectedAt >= graceMs) byId.delete(p.clientId);
-	}
-}
 
 // ---- Secret generator ----------------------------------------------------
 

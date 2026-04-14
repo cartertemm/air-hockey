@@ -74,8 +74,8 @@ export function roomConfirm() {
 
 // ---- Server -> Client factories -----------------------------------------
 
-export function welcome({ clientId, sessionToken, name, resumed }) {
-	return { type: MSG.WELCOME, clientId, sessionToken, name, resumed };
+export function welcome({ clientId, sessionToken, name }) {
+	return { type: MSG.WELCOME, clientId, sessionToken, name };
 }
 
 export function roomState({ room }) {

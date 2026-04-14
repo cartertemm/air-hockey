@@ -10,7 +10,7 @@ import {
 import {
 	Player,
 	register,
-	lookup,
+	unregister,
 	generateSecret,
 } from './player.js';
 import {
@@ -37,17 +37,9 @@ export function handleConnection(rawSocket) {
 		wrapped?.send(errorMsg({ code, message }));
 	}
 
-	function mintFreshPlayer(name) {
-		const p = new Player({
-			clientId:     generateSecret(),
-			sessionToken: generateSecret(),
-			name:         name || 'anonymous',
-			socket:       wrapped,
-		});
-		register(p);
-		return p;
-	}
-
+	// Every HELLO mints a fresh Player. The client may send a stored
+	// clientId/sessionToken from a prior welcome — we ignore them. When
+	// real mid-game reconnect is needed, it will live in Room, not here.
 	function handleHello(msg) {
 		clearHelloTimer();
 		if (msg.type !== MSG.HELLO) {
@@ -55,54 +47,18 @@ export function handleConnection(rawSocket) {
 			wrapped.close();
 			return;
 		}
-		const { clientId, sessionToken, name } = msg;
-
-		if (!clientId) {
-			player = mintFreshPlayer(name);
-			wrapped.send(welcome({
-				clientId: player.clientId,
-				sessionToken: player.sessionToken,
-				name: player.name,
-				resumed: false,
-			}));
-			return;
-		}
-
-		const existing = lookup(clientId);
-
-		if (!existing) {
-			player = mintFreshPlayer(name);
-			wrapped.send(welcome({
-				clientId: player.clientId,
-				sessionToken: player.sessionToken,
-				name: player.name,
-				resumed: false,
-			}));
-			return;
-		}
-
-		if (existing.isConnected()) {
-			sendError(ERR.SESSION_ACTIVE);
-			wrapped.close();
-			return;
-		}
-
-		if (existing.sessionToken !== sessionToken) {
-			sendError(ERR.UNAUTHORIZED);
-			wrapped.close();
-			return;
-		}
-
-		existing.attachSocket(wrapped);
-		existing.rotateToken();
-		player = existing;
+		player = new Player({
+			clientId:     generateSecret(),
+			sessionToken: generateSecret(),
+			name:         msg.name || 'anonymous',
+			socket:       wrapped,
+		});
+		register(player);
 		wrapped.send(welcome({
 			clientId: player.clientId,
 			sessionToken: player.sessionToken,
 			name: player.name,
-			resumed: true,
 		}));
-		player.room?.resendStateTo(player);
 	}
 
 	function dispatch(msg) {
@@ -153,8 +109,9 @@ export function handleConnection(rawSocket) {
 		clearHelloTimer();
 		if (!player) return;
 		unsubscribeLobby(player);
-		player.detachSocket();
-		player.room?.onMemberDisconnected(player);
+		player.socket = null;
+		player.room?.removeMember(player, { disconnected: true });
+		unregister(player);
 	}
 
 	wrapped = wrapSocket(rawSocket, { onMessage, onClose, onError: () => {} });

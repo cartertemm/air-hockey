@@ -28,7 +28,8 @@ export class Room {
 		broadcastLobbyUpdate();
 	}
 
-	removeMember(player) {
+	removeMember(player, { disconnected = false } = {}) {
+		const announcement = disconnected ? `${player.name} has disconnected.` : null;
 		this.members = this.members.filter(m => m !== player);
 		this.ready.delete(player);
 		this.confirmed.delete(player);
@@ -42,7 +43,7 @@ export class Room {
 			destroyRoom(this);
 			return;
 		}
-		this.broadcastState();
+		this.broadcastState(announcement);
 		broadcastLobbyUpdate();
 	}
 
@@ -66,17 +67,13 @@ export class Room {
 		broadcastLobbyUpdate();
 	}
 
-	onMemberDisconnected(_player) {
-		this.broadcastState();
-	}
-
 	isFull()       { return this.members.length >= 2; }
 	allReady()     { return this.members.length === 2 && this.members.every(m => this.ready.has(m)); }
 	allConfirmed() { return this.members.length === 2 && this.members.every(m => this.confirmed.has(m)); }
 	isReady(p)     { return this.ready.has(p); }
 	isConfirmed(p) { return this.confirmed.has(p); }
 
-	snapshot() {
+	snapshot(eventMessage = null) {
 		return {
 			id: this.id,
 			mode: this.mode,
@@ -84,6 +81,7 @@ export class Room {
 			phase: this.phase,
 			members: this.members.map(m => m.toMemberSnapshot()),
 			createdAt: this.createdAt,
+			lastEventMessage: eventMessage,
 		};
 	}
 
@@ -98,16 +96,12 @@ export class Room {
 		};
 	}
 
-	broadcastState() {
-		for (const m of this.members) m.send(roomState({ room: this.snapshot() }));
+	broadcastState(eventMessage = null) {
+		for (const m of this.members) m.send(roomState({ room: this.snapshot(eventMessage) }));
 	}
 
 	broadcastCountdown() {
 		for (const m of this.members) m.send(roomCountdown({ roomId: this.id }));
-	}
-
-	resendStateTo(player) {
-		player.send(roomState({ room: this.snapshot() }));
 	}
 }
 

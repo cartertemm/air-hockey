@@ -137,18 +137,37 @@ const SCREENS = {
 	},
 
 	waitingRoom(root, props) {
+		const announcement = props.room.lastEventMessage
+			? el('p', { role: 'status', 'aria-live': 'polite', text: props.room.lastEventMessage })
+			: null;
 		mount(root, [
 			el('h1', { text: `Room: ${props.room.id}` }),
 			el('p', { text: `${props.room.mode} — ${props.room.pointLimit} points` }),
 			el('ul', {}, ...props.room.members.map(m => el('li', {
 				text: `${m.name}${m.ready ? ' (ready)' : ''}${m.connected ? '' : ' (offline)'}`,
 			}))),
+			announcement,
 			el('button', {
 				text: props.localReady ? 'Unready' : 'Ready',
 				onClick: props.onToggleReady,
 				autoFocus: true,
 			}),
 			el('button', { text: 'Leave', onClick: props.onLeave }),
+		].filter(Boolean));
+	},
+
+	roomError(root, props) {
+		mount(root, [
+			el('h1', { text: 'Room unavailable' }),
+			el('p', { role: 'alert', 'aria-live': 'assertive', text: props.message }),
+			el('button', { text: 'Back', onClick: props.onBack, autoFocus: true }),
+		]);
+	},
+
+	countdown(root, props) {
+		mount(root, [
+			el('h1', { text: 'Starting' }),
+			el('p', { 'aria-live': 'polite', text: `Starting in room ${props.roomId}…` }),
 		]);
 	},
 

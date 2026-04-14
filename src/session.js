@@ -4,6 +4,7 @@ import { renderScreen } from './ui.js';
 import { createClient as realCreateClient } from './net/client.js';
 import { isIOSStandalone } from './platform.js';
 import {
+	initSpeech,
 	speak,
 	getSpeechMode,
 	setSpeechMode,
@@ -18,6 +19,7 @@ import {
 import { randomFact } from './airHockeyFacts.js';
 import {
 	MSG,
+	ERR,
 	hello,
 	roomCreate,
 	roomJoin,
@@ -28,6 +30,12 @@ import {
 	lobbySubscribe,
 	lobbyUnsubscribe,
 } from 'network/protocol.js';
+
+const ROOM_ERROR_MESSAGES = {
+	[ERR.ROOM_FULL]:         'That room just filled up. Pick another or create a new one.',
+	[ERR.ROOM_NOT_JOINABLE]: 'That room is no longer accepting players.',
+	[ERR.ROOM_NOT_FOUND]:    'That room no longer exists.',
+};
 
 // Lazily loaded so cacophony and the .ogg asset are never pulled into tests
 // (no test clicks Play). The dynamic imports also defer cacophony's AudioContext
@@ -89,6 +97,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 
 	function go(next, props = {}) {
 		currentScreen?.dispose?.();
+		state?.onDispose?.();
 		state = next;
 		currentScreen = renderScreen(root, next.screen, { ...next.props, ...props });
 	}
@@ -129,8 +138,8 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 			props: {
 				name,
 				connected: true,
-				onCreate:        () => { /* TODO: createGame screen — not in this task */ },
-				onJoin:          () => { /* TODO: joinGame screen — not in this task */ },
+				onCreate:        () => go(screenCreateGame()),
+				onJoin:          () => go(screenJoinGame()),
 				onTestSpeakers:  () => go(screenTestSpeakers(true)),
 				onSettings:      () => go(screenSettings(true)),
 				onDisconnect:    () => {
@@ -141,6 +150,154 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 					c?.close();
 				},
 			},
+		};
+	}
+
+	function screenCreateGame() {
+		const cancel = () => go(screenOnlineMenu());
+		return {
+			screen: 'createGame',
+			props: {
+				onSubmit: ({ mode, pointLimit }) => {
+					client?.send(roomCreate({ mode, pointLimit }));
+				},
+				onCancel: cancel,
+			},
+			onEscape: cancel,
+			onMessage: (msg) => {
+				if (msg.type === MSG.ROOM_STATE) {
+					go(screenWaitingRoom(msg.room));
+					return true;
+				}
+				if (msg.type === MSG.ERROR && ROOM_ERROR_MESSAGES[msg.code]) {
+					go(screenRoomError(msg.code));
+					return true;
+				}
+				return false;
+			},
+		};
+	}
+
+	function screenJoinGame() {
+		let listUpdater = null;
+		const back = () => go(screenOnlineMenu());
+		client?.send(lobbySubscribe());
+		return {
+			screen: 'joinGame',
+			props: {
+				rooms: [],
+				onReady: ({ update }) => { listUpdater = update; },
+				onPick: (roomId) => {
+					client?.send(roomJoin({ roomId }));
+				},
+				onBack: back,
+			},
+			onEscape: back,
+			onDispose: () => {
+				client?.send(lobbyUnsubscribe());
+			},
+			onMessage: (msg) => {
+				if (msg.type === MSG.LOBBY_UPDATE) {
+					listUpdater?.(msg.rooms ?? []);
+					return true;
+				}
+				if (msg.type === MSG.ROOM_STATE) {
+					go(screenWaitingRoom(msg.room));
+					return true;
+				}
+				if (msg.type === MSG.ERROR && ROOM_ERROR_MESSAGES[msg.code]) {
+					go(screenRoomError(msg.code));
+					return true;
+				}
+				return false;
+			},
+		};
+	}
+
+	function findMe(room) {
+		const { clientId } = getIdentity();
+		return room.members.find(m => m.clientId === clientId) ?? null;
+	}
+
+	function screenWaitingRoom(room) {
+		const me = findMe(room);
+		const localReady = me?.ready ?? false;
+		const leave = () => {
+			client?.send(roomLeave());
+			go(screenOnlineMenu());
+		};
+		return {
+			screen: 'waitingRoom',
+			props: {
+				room,
+				localReady,
+				onToggleReady: () => {
+					client?.send(localReady ? roomUnready() : roomReady());
+				},
+				onLeave: leave,
+			},
+			onEscape: leave,
+			onMessage: (msg) => {
+				if (msg.type === MSG.ROOM_STATE) {
+					if (msg.room.phase === 'ready') {
+						go(screenHandoff(msg.room));
+					} else {
+						go(screenWaitingRoom(msg.room));
+					}
+					return true;
+				}
+				return false;
+			},
+		};
+	}
+
+	function screenHandoff(room) {
+		const leave = () => {
+			client?.send(roomLeave());
+			go(screenOnlineMenu());
+		};
+		const confirm = () => {
+			client?.send(roomConfirm());
+		};
+		return {
+			screen: isIOS() ? 'handoffIos' : 'handoffDesktop',
+			props: {
+				onContinue: confirm,
+				onConfirm:  confirm,
+			},
+			onEscape: leave,
+			onMessage: (msg) => {
+				if (msg.type === MSG.ROOM_STATE) {
+					if (msg.room.phase !== 'ready') {
+						go(screenWaitingRoom(msg.room));
+					}
+					return true;
+				}
+				if (msg.type === MSG.ROOM_COUNTDOWN) {
+					go(screenCountdown(msg.roomId ?? room.id));
+					return true;
+				}
+				return false;
+			},
+		};
+	}
+
+	function screenCountdown(roomId) {
+		return {
+			screen: 'countdown',
+			props: { roomId },
+		};
+	}
+
+	function screenRoomError(code) {
+		const back = () => go(screenOnlineMenu());
+		return {
+			screen: 'roomError',
+			props: {
+				message: ROOM_ERROR_MESSAGES[code] ?? 'Unknown room error.',
+				onBack: back,
+			},
+			onEscape: back,
 		};
 	}
 
@@ -271,19 +428,16 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 	// ---- Incoming message router -----------------------------------------
 
 	function onServerMessage(msg) {
-		switch (msg.type) {
-			case MSG.WELCOME:
-				setIdentityFromWelcome(msg);
-				if (!welcomeSeen) {
-					welcomeSeen = true;
-					playNotification('connect');
-					go(screenOnlineMenu());
-				}
-				break;
-			// Room/lobby/error handling lands in the next plan increment.
-			default:
-				break;
+		if (msg.type === MSG.WELCOME) {
+			setIdentityFromWelcome(msg);
+			if (!welcomeSeen) {
+				welcomeSeen = true;
+				playNotification('connect');
+				go(screenOnlineMenu());
+			}
+			return;
 		}
+		if (state?.onMessage?.(msg)) return;
 	}
 
 	// ---- Boot ------------------------------------------------------------

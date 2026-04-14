@@ -163,6 +163,35 @@ describe('removeMember', () => {
 		room.removeMember(host);
 		expect(getRoom(room.id)).toBeNull();
 	});
+
+	test('disconnect flag attaches a "{name} has disconnected." announcement to the broadcast', () => {
+		const host = makePlayer('h', 'Alice');
+		const joiner = makePlayer('j', 'Bob');
+		const room = createRoom(host, { mode: 'single', pointLimit: 7 });
+		room.addMember(joiner);
+		host.socket.sent.length = 0;
+		room.removeMember(joiner, { disconnected: true });
+		const state = host.socket.sent.find(m => m.type === MSG.ROOM_STATE);
+		expect(state.room.lastEventMessage).toBe('Bob has disconnected.');
+	});
+
+	test('explicit leave (no disconnect flag) carries no announcement', () => {
+		const host = makePlayer('h', 'Alice');
+		const joiner = makePlayer('j', 'Bob');
+		const room = createRoom(host, { mode: 'single', pointLimit: 7 });
+		room.addMember(joiner);
+		host.socket.sent.length = 0;
+		room.removeMember(joiner);
+		const state = host.socket.sent.find(m => m.type === MSG.ROOM_STATE);
+		expect(state.room.lastEventMessage).toBeNull();
+	});
+
+	test('disconnect by the only remaining member destroys the room (no lingering 2/2)', () => {
+		const host = makePlayer('h', 'Alice');
+		const room = createRoom(host, { mode: 'single', pointLimit: 7 });
+		room.removeMember(host, { disconnected: true });
+		expect(getRoom(room.id)).toBeNull();
+	});
 });
 
 describe('lobby subscriptions', () => {
@@ -186,12 +215,3 @@ describe('lobby subscriptions', () => {
 	});
 });
 
-describe('resendStateTo', () => {
-	test('sends a room:state to the player', () => {
-		const host = makePlayer('h');
-		const room = createRoom(host, { mode: 'single', pointLimit: 7 });
-		host.socket.sent.length = 0;
-		room.resendStateTo(host);
-		expect(sentTypes(host)).toEqual([MSG.ROOM_STATE]);
-	});
-});

@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach } from 'vitest';
 import { startSession } from '../src/session.js';
 import { setIdentityFromWelcome, getIdentity, clearIdentity } from '../src/identity.js';
 import { getSpeechMode, setSpeechMode, getRate, getPitch, getVoice, SPEECH_MODE_TTS } from '../src/speech.js';
-import { MSG } from 'network/protocol.js';
+import { MSG, ERR } from 'network/protocol.js';
 
 function makeFakeClient() {
 	const handlers = {};
@@ -465,6 +465,337 @@ describe('session: settings screen', () => {
 		globalThis.speechSynthesis.dispatchEvent(new Event('voiceschanged'));
 		const after = [...root.querySelectorAll('#settings-voice option')].map(o => o.textContent);
 		expect(after).toEqual(['Alpha', 'Beta']);
+	});
+});
+
+// Shared helper: reach the online main menu with a known clientId so that
+// ROOM_STATE snapshots can address the local member.
+async function openOnlineMenu({ isIOS = () => false, name = 'A', clientId = 'c1' } = {}) {
+	const root = setupRoot();
+	setIdentityFromWelcome({ clientId: null, sessionToken: null, name });
+	const factory = makeFakeClient();
+	startSession({ root, createClient: factory, isIOS });
+	root.querySelector('button').click(); // Connect
+	await Promise.resolve();
+	factory.fireMessage({
+		type: MSG.WELCOME,
+		clientId, sessionToken: 't1', name, resumed: false,
+	});
+	return { root, factory };
+}
+
+function clickText(root, text) {
+	const btn = [...root.querySelectorAll('button')].find(b => b.textContent === text);
+	btn.click();
+	return btn;
+}
+
+function makeRoom({
+	id = 'swift-otter-42',
+	phase = 'waiting',
+	mode = 'single',
+	pointLimit = 7,
+	members = [{ clientId: 'c1', name: 'A', ready: false, confirmed: false, connected: true }],
+	lastEventMessage = null,
+} = {}) {
+	return { id, phase, mode, pointLimit, members, createdAt: 0, lastEventMessage };
+}
+
+describe('session: create game flow', () => {
+	test('Create game opens the form, submits roomCreate, and ROOM_STATE advances to waitingRoom', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		expect(root.querySelector('h1').textContent).toBe('Create game');
+		// Defaults: mode=single, points=7 per ui.js
+		clickText(root, 'Create');
+		const sent = factory.client.sent.find(m => m.type === MSG.ROOM_CREATE);
+		expect(sent).toEqual({ type: MSG.ROOM_CREATE, mode: 'single', pointLimit: 7 });
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		expect(root.querySelector('h1').textContent).toBe('Room: swift-otter-42');
+	});
+
+	test('changing mode/points is reflected in the submitted payload', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		root.querySelector('input[name=mode][value=bestOf3]').checked = true;
+		root.querySelector('input[name=points][value=11]').checked = true;
+		clickText(root, 'Create');
+		const sent = factory.client.sent.find(m => m.type === MSG.ROOM_CREATE);
+		expect(sent).toEqual({ type: MSG.ROOM_CREATE, mode: 'bestOf3', pointLimit: 11 });
+	});
+
+	test('Cancel returns to the online menu without sending roomCreate', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		clickText(root, 'Cancel');
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CREATE)).toBe(false);
+	});
+
+	test('Escape on create-game screen returns to the online menu', async () => {
+		const { root } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		dispatchEscape(root);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('ERROR with ROOM_FULL during create shows the roomError screen', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ERROR, code: ERR.ROOM_FULL, message: 'full' });
+		expect(root.querySelector('h1').textContent).toBe('Room unavailable');
+		clickText(root, 'Back');
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+});
+
+describe('session: join game flow', () => {
+	test('opening Join game sends lobbySubscribe and renders an empty list', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Join game');
+		expect(root.querySelector('h1').textContent).toBe('Join game');
+		expect(factory.client.sent.some(m => m.type === MSG.LOBBY_SUBSCRIBE)).toBe(true);
+		expect(root.querySelector('li').textContent).toBe('No rooms yet.');
+	});
+
+	test('LOBBY_UPDATE populates the room list live', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Join game');
+		factory.fireMessage({
+			type: MSG.LOBBY_UPDATE,
+			full: true,
+			rooms: [
+				{ id: 'r1', hostName: 'Host One', mode: 'single',  pointLimit: 7,  memberCount: 1, phase: 'waiting' },
+				{ id: 'r2', hostName: 'Host Two', mode: 'bestOf3', pointLimit: 11, memberCount: 1, phase: 'waiting' },
+			],
+		});
+		const labels = [...root.querySelectorAll('li button')].map(b => b.textContent);
+		expect(labels).toEqual([
+			'Host One — single — 7 pts (1/2)',
+			'Host Two — bestOf3 — 11 pts (1/2)',
+		]);
+	});
+
+	test('picking a room sends roomJoin and ROOM_STATE advances to waitingRoom', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Join game');
+		factory.fireMessage({
+			type: MSG.LOBBY_UPDATE, full: true,
+			rooms: [{ id: 'r1', hostName: 'H', mode: 'single', pointLimit: 7, memberCount: 1, phase: 'waiting' }],
+		});
+		root.querySelector('li button').click();
+		const sent = factory.client.sent.find(m => m.type === MSG.ROOM_JOIN);
+		expect(sent).toEqual({ type: MSG.ROOM_JOIN, roomId: 'r1' });
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom({ id: 'r1' }) });
+		expect(root.querySelector('h1').textContent).toBe('Room: r1');
+	});
+
+	test('Back on join screen sends lobbyUnsubscribe and returns to online menu', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Join game');
+		clickText(root, 'Back');
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+		expect(factory.client.sent.some(m => m.type === MSG.LOBBY_UNSUBSCRIBE)).toBe(true);
+	});
+
+	test('Escape on join screen sends lobbyUnsubscribe and returns to online menu', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Join game');
+		dispatchEscape(root);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+		expect(factory.client.sent.some(m => m.type === MSG.LOBBY_UNSUBSCRIBE)).toBe(true);
+	});
+
+	test('ERROR with ROOM_NOT_FOUND while joining shows the roomError screen', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Join game');
+		factory.fireMessage({
+			type: MSG.LOBBY_UPDATE, full: true,
+			rooms: [{ id: 'r1', hostName: 'H', mode: 'single', pointLimit: 7, memberCount: 1, phase: 'waiting' }],
+		});
+		root.querySelector('li button').click();
+		factory.fireMessage({ type: MSG.ERROR, code: ERR.ROOM_NOT_FOUND, message: 'gone' });
+		expect(root.querySelector('h1').textContent).toBe('Room unavailable');
+	});
+});
+
+describe('session: waiting room', () => {
+	test('Ready button sends roomReady and flips to Unready after server echo', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		clickText(root, 'Ready');
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_READY)).toBe(true);
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				members: [{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true }],
+			}),
+		});
+		expect([...root.querySelectorAll('button')].some(b => b.textContent === 'Unready')).toBe(true);
+	});
+
+	test('Unready sends roomUnready', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				members: [{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true }],
+			}),
+		});
+		clickText(root, 'Unready');
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_UNREADY)).toBe(true);
+	});
+
+	test('Leave sends roomLeave and returns to the online menu', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		clickText(root, 'Leave');
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_LEAVE)).toBe(true);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('Escape in the waiting room leaves and returns to the online menu', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		dispatchEscape(root);
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_LEAVE)).toBe(true);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('ROOM_STATE with lastEventMessage renders a polite aria-live announcement', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				members: [{ clientId: 'c1', name: 'A', ready: false, confirmed: false, connected: true }],
+				lastEventMessage: 'Bob has disconnected.',
+			}),
+		});
+		const live = [...root.querySelectorAll('p')].find(p => p.getAttribute('aria-live') === 'polite');
+		expect(live).toBeTruthy();
+		expect(live.textContent).toBe('Bob has disconnected.');
+		expect(live.getAttribute('role')).toBe('status');
+	});
+
+	test('phase=ready ROOM_STATE advances to handoff (desktop)', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		expect(root.querySelector('h1').textContent).toBe('Almost ready');
+		expect(root.querySelector('p').textContent).toMatch(/Press Enter/);
+	});
+});
+
+describe('session: handoff and countdown', () => {
+	test('pressing Enter on desktop handoff sends roomConfirm', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(true);
+	});
+
+	test('ROOM_COUNTDOWN advances to the countdown screen', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		factory.fireMessage({ type: MSG.ROOM_COUNTDOWN, roomId: 'swift-otter-42' });
+		expect(root.querySelector('h1').textContent).toBe('Starting');
+	});
+
+	test('opponent unready during handoff reverts to the waiting room', async () => {
+		const { root, factory } = await openOnlineMenu();
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		expect(root.querySelector('h1').textContent).toBe('Almost ready');
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'waiting',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true,  confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: false, confirmed: false, connected: true },
+				],
+			}),
+		});
+		expect(root.querySelector('h1').textContent).toBe('Room: swift-otter-42');
+	});
+
+	test('iOS handoff shows the VoiceOver notice and Continue sends roomConfirm', async () => {
+		const { root, factory } = await openOnlineMenu({ isIOS: () => true });
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		expect(root.querySelector('h1').textContent).toBe('Almost ready');
+		expect(root.querySelector('p').textContent).toMatch(/VoiceOver/);
+		clickText(root, 'Continue');
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(true);
 	});
 });
 
