@@ -4,6 +4,21 @@ Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-s
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
+## Prerequisites
+
+- Write clear, succinct commit messages - one or two sentences max
+- Use conventional commit format when applicable
+
+## Project notes
+
+- **Tabs only; never indent blank lines** (they must be zero-width). No blank lines inside function bodies.
+- **Vitest: no globals.** Always `import { describe, test, expect } from 'vitest'`. `tests/setup.js` preloads `speechSynthesis` and `localStorage` mocks and resets state between tests — read it before writing client tests.
+- **Server test isolation.** `server/player.js` and `server/room.js` hold module-level state; call `_resetPlayers()` / `_resetRooms()` in `beforeEach`.
+- **Real `WebSocket.close()` fires `close` asynchronously.** Synchronous fake clients hide teardown races. When testing connection teardown, use `makeAsyncFakeClient` in `tests/client-session.test.js`.
+- **`screenConnecting` in `src/session.js` captures `myClient` as a closure** so stale close handlers from abandoned attempts can detect themselves via `client !== myClient`. Load-bearing — preserve it.
+- **Pre-game screens use native HTML + browser screen reader; gameplay uses `speak()`.** Don't mix the two. iOS VoiceOver intercepts gameplay gestures — `handoffIos` warns the user before gameplay starts.
+- **Shared wire code lives in `network/`** and is imported by both client and server via the `network` Vite alias.
+
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
