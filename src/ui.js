@@ -171,11 +171,15 @@ const SCREENS = {
 		root.__keyHandler = onKey;
 	},
 
-	stubSpeakers(root, props) {
+	testSpeakers(root, props) {
 		mount(root, [
 			el('h1', { text: 'Test speakers' }),
-			el('p', { text: 'Not yet implemented.' }),
-			el('button', { text: 'Back', onClick: props.onBack, autoFocus: true }),
+			el('p', {
+				'aria-live': 'polite',
+				text: 'The first sound you will hear is on your left. The second sound, the puck landing, is on your right.',
+			}),
+			el('button', { text: 'Play test sound', onClick: props.onPlay, autoFocus: true }),
+			el('button', { text: 'Back', onClick: props.onBack }),
 		]);
 	},
 

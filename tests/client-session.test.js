@@ -218,14 +218,21 @@ describe('session: async close timing (regression)', () => {
 });
 
 describe('session: offline stub screens', () => {
-	test('Test speakers -> stub -> back to offline main menu', () => {
+	test('Test speakers screen mentions left/right and returns to offline menu', () => {
 		const root = setupRoot();
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		const testSpeakers = [...root.querySelectorAll('button')].find(b => b.textContent === 'Test speakers');
 		testSpeakers.click();
 		expect(root.querySelector('h1').textContent).toBe('Test speakers');
-		root.querySelector('button').click(); // Back
+		const description = root.querySelector('p').textContent;
+		expect(description).toMatch(/left/);
+		expect(description).toMatch(/right/);
+		expect(description).toMatch(/puck/);
+		const labels = [...root.querySelectorAll('button')].map(b => b.textContent);
+		expect(labels).toEqual(['Play test sound', 'Back']);
+		const back = [...root.querySelectorAll('button')].find(b => b.textContent === 'Back');
+		back.click();
 		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
 	});
 });
