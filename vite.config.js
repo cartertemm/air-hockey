@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -13,26 +13,30 @@ function httpsConfig() {
 	return false;
 }
 
-export default defineConfig({
-	resolve: {
-		alias: {
-			network: path.resolve(__dirname, 'network'),
-		},
-	},
-	server: {
-		https: httpsConfig(),
-		proxy: {
-			'/ws': {
-				target: 'wss://localhost:8443',
-				ws: true,
-				changeOrigin: true,
-				secure: false,
+export default defineConfig(({ mode }) => {
+	const env = loadEnv(mode, process.cwd(), '');
+	const serverPort = env.SERVER_PORT ?? '8443';
+	return {
+		resolve: {
+			alias: {
+				network: path.resolve(__dirname, 'network'),
 			},
 		},
-	},
-	test: {
-		environment: 'happy-dom',
-		setupFiles: ['./tests/setup.js'],
-		globals: false,
-	},
+		server: {
+			https: httpsConfig(),
+			proxy: {
+				'/ws': {
+					target: `wss://localhost:${serverPort}`,
+					ws: true,
+					changeOrigin: true,
+					secure: false,
+				},
+			},
+		},
+		test: {
+			environment: 'happy-dom',
+			setupFiles: ['./tests/setup.js'],
+			globals: false,
+		},
+	};
 });

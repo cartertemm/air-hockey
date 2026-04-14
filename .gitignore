@@ -6,3 +6,5 @@ dist/
 coverage/
 docs/superpowers/
 dev-certs/*.pem
+.env
+.env.local

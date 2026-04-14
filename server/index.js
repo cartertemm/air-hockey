@@ -31,8 +31,8 @@ const reaperHandle = setInterval(
 );
 reaperHandle.unref?.();
 
-server.listen(CONFIG.PORT, () => {
-	console.log(`[server] listening on wss://localhost:${CONFIG.PORT}`);
+server.listen(CONFIG.PORT, CONFIG.HOST, () => {
+	console.log(`[server] listening on wss://${CONFIG.HOST}:${CONFIG.PORT}`);
 });
 
 function shutdown() {
