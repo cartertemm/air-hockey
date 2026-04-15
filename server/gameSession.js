@@ -1,6 +1,7 @@
 import { createPuck, createMallet, step as physicsStep, MALLET_RADIUS, TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
 import { EventEmitter } from '../src/events.js';
 import { GameStateMachine, State } from '../src/stateMachine.js';
+import { gameStart, gameSnapshot, gameEnd } from '../network/protocol.js';
 
 const COUNTDOWN_MS = 3000;
 const GOAL_HOLD_MS = 2000;
@@ -41,6 +42,8 @@ export class GameSession {
 		this.firstServer = null;
 		this.simNow = 0;
 		this._timers = [];
+		this._interval = null;
+		this._startTime = 0;
 		this._wireEvents();
 	}
 
@@ -134,9 +137,12 @@ export class GameSession {
 		this._timers = [];
 		this.firstServer = firstServer ?? (Math.random() < 0.5 ? 'p1' : 'p2');
 		this.stateMachine.startCountdown(this.firstServer);
+		for (const key of ['p1', 'p2']) {
+			this.players[key].send(gameStart({ localPlayer: key, pointLimit: this.pointLimit }));
+		}
 		this.pendingEvents.push({ type: 'game:countdown', seconds: 3 });
 		for (let seconds = 2; seconds >= 0; seconds--) {
-			this._schedule((3 - seconds) * 1000, () => {
+			this._schedule(COUNTDOWN_MS - (seconds * 1000), () => {
 				this.pendingEvents.push({ type: 'game:countdown', seconds });
 				if (seconds === 0) this.stateMachine.beginServe();
 			});
@@ -152,6 +158,55 @@ export class GameSession {
 		const drained = this.pendingEvents;
 		this.pendingEvents = [];
 		return drained;
+	}
+
+	makeSnapshot() {
+		const { puck, mallets } = this.physicsState;
+		return gameSnapshot({
+			tick: this.tickCount,
+			state: this.stateMachine.state,
+			puck: { x: puck.x, y: puck.y, vx: puck.vx, vy: puck.vy, omega: puck.omega, onTable: puck.onTable },
+			mallets: {
+				p1: { x: mallets.p1.x, y: mallets.p1.y, vx: mallets.p1.vx, vy: mallets.p1.vy, onTable: mallets.p1.onTable },
+				p2: { x: mallets.p2.x, y: mallets.p2.y, vx: mallets.p2.vx, vy: mallets.p2.vy, onTable: mallets.p2.onTable },
+			},
+			scores: {
+				p1: { points: this.stateMachine.scores.p1.points },
+				p2: { points: this.stateMachine.scores.p2.points },
+			},
+			servingPlayer: this.stateMachine.servingPlayer,
+			events: this.drainPendingEvents(),
+		});
+	}
+
+	broadcastIfDue() {
+		if (this.tickCount === 0 || this.tickCount % 2 !== 0) return;
+		const snapshot = this.makeSnapshot();
+		this.players.p1.send(snapshot);
+		this.players.p2.send(snapshot);
+	}
+
+	sendGameEnd({ winner, finalScore }) {
+		const msg = gameEnd({ winner, finalScore });
+		this.players.p1.send(msg);
+		this.players.p2.send(msg);
+	}
+
+	startRealTimeLoop({ intervalMs = 1000 / 120 } = {}) {
+		if (this._interval) return;
+		this._startTime = Date.now() - this.simNow;
+		this._interval = setInterval(() => {
+			this.simNow = Date.now() - this._startTime;
+			this._pumpTimers();
+			this.tick(intervalMs / 1000);
+			this.broadcastIfDue();
+		}, intervalMs);
+	}
+
+	stopRealTimeLoop() {
+		if (!this._interval) return;
+		clearInterval(this._interval);
+		this._interval = null;
 	}
 
 	tick(dt) {

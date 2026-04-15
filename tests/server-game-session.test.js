@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import { GameSession } from '../server/gameSession.js';
+import { MSG } from '../network/protocol.js';
 import { MALLET_RADIUS, TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
 import { State } from '../src/stateMachine.js';
 
@@ -131,5 +132,44 @@ describe('GameSession lifecycle', () => {
 		expect(endings).toHaveLength(1);
 		expect(endings[0].winner).toBe('p1');
 		expect(endings[0].finalScore).toEqual({ p1: 1, p2: 0 });
+	});
+});
+
+describe('GameSession snapshots', () => {
+	test('start() sends GAME_START to both players', () => {
+		const { p1, p2, session } = makeSession();
+		session.start({ now: 0, firstServer: 'p1' });
+		expect(p1.sent[0]?.type).toBe(MSG.GAME_START);
+		expect(p1.sent[0].localPlayer).toBe('p1');
+		expect(p2.sent[0].localPlayer).toBe('p2');
+		expect(p1.sent[0].pointLimit).toBe(7);
+	});
+
+	test('broadcastIfDue sends a snapshot every 2nd tick', () => {
+		const { p1, p2, session } = makeSession();
+		session.start({ now: 0, firstServer: 'p1' });
+		const before = p1.sent.length;
+		session.tick(1 / 120);
+		session.broadcastIfDue();
+		expect(p1.sent.length).toBe(before);
+		session.tick(1 / 120);
+		session.broadcastIfDue();
+		expect(p1.sent.length).toBe(before + 1);
+		expect(p1.sent[p1.sent.length - 1].type).toBe(MSG.GAME_SNAPSHOT);
+		expect(p2.sent[p2.sent.length - 1].type).toBe(MSG.GAME_SNAPSHOT);
+	});
+
+	test('snapshot contains puck, mallets, scores, servingPlayer, and draining events', () => {
+		const { p1, session } = makeSession();
+		session.start({ now: 0, firstServer: 'p1' });
+		session.tick(1 / 120);
+		session.tick(1 / 120);
+		session.broadcastIfDue();
+		const snap = p1.sent.find(msg => msg.type === MSG.GAME_SNAPSHOT);
+		expect(snap.puck).toHaveProperty('x');
+		expect(snap.mallets.p1).toHaveProperty('onTable');
+		expect(snap.scores).toEqual({ p1: { points: 0 }, p2: { points: 0 } });
+		expect(Array.isArray(snap.events)).toBe(true);
+		expect(session.pendingEvents).toEqual([]);
 	});
 });
