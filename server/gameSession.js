@@ -57,7 +57,8 @@ export class GameSession {
 		this.emitter.on('puck:mallet_hit', ({ speed }) => this.stateMachine.handlePuckStruck(speed));
 		this.emitter.on('puck:wall_bounce', push('puck:wall_bounce'));
 		this.emitter.on('puck:goal', (data) => {
-			this.pendingEvents.push({ type: 'puck:goal', ...(data ?? {}) });
+			const puckSpeed = Math.hypot(this.physicsState.puck.vx, this.physicsState.puck.vy);
+			this.pendingEvents.push({ type: 'puck:goal', ...(data ?? {}), puckSpeed });
 			this.stateMachine.handleGoal(data.scoredBy);
 			if (this.stateMachine.state === State.MATCH_END) {
 				this._scheduleMatchEnd();
@@ -72,7 +73,10 @@ export class GameSession {
 			this.stateMachine.state = State.OFF_TABLE;
 			this._scheduleBeginServe();
 		});
-		this.emitter.on('goal:scored', push('goal:scored'));
+		this.emitter.on('goal:scored', (data) => {
+			const puckSpeed = Math.hypot(this.physicsState.puck.vx, this.physicsState.puck.vy);
+			this.pendingEvents.push({ type: 'goal:scored', ...(data ?? {}), puckSpeed });
+		});
 		this.emitter.on('game:start', push('game:start'));
 		this.emitter.on('match:end', push('match:end'));
 		this.emitter.on('serve:assigned', (data) => {
