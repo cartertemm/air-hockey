@@ -1,8 +1,10 @@
-// Wraps an audio asset behind a minimal play/stop/load API. Cacophony, the
-// AudioContext, and the .ogg ?url asset are all loaded lazily on first use,
-// so importing this file is safe in tests without an AudioContext.
-// play({loop:'infinite'}) is idempotent: calling again while already looping
-// is a no-op. stop() halts the current playback.
+// Wraps an audio asset behind a minimal play/stop/load/setPosition API.
+// Cacophony, the AudioContext, and the .ogg ?url asset are all loaded lazily
+// on first use, so importing this file is safe in tests without an
+// AudioContext. play({loop:'infinite'}) is idempotent: calling again while
+// already looping is a no-op. play() accepts {position:[x,y,z]} for the
+// initial 3D position; setPosition() updates position on a sound that's
+// already loaded or playing (e.g. tracking a moving puck).
 
 let modulePromise = null;
 function loadModule() {
@@ -21,7 +23,7 @@ function loadModule() {
 
 export function sfx(urlImporter) {
 	let handlePromise = null;
-	let playing = false;
+	let looping = false;
 	let epoch = 0;
 	function ensureLoaded() {
 		if (!handlePromise) {
@@ -40,24 +42,34 @@ export function sfx(urlImporter) {
 			try {
 				const loaded = await ensureLoaded();
 				if (myEpoch !== epoch || !loaded) return;
-				if (options.loop && playing) return;
-				playing = true;
+				if (options.loop) {
+					if (looping) return;
+					looping = true;
+				}
 				loaded.sound.playSound(loaded.handle, options);
 			} catch (err) {
 				console.warn('sfx play failed', err);
 				handlePromise = null;
-				if (myEpoch === epoch) playing = false;
+				if (myEpoch === epoch && options.loop) looping = false;
 			}
 		},
 		async stop() {
 			epoch++;
-			playing = false;
+			looping = false;
 			if (!handlePromise) return;
 			try {
 				const loaded = await handlePromise;
 				loaded?.sound.stopSound(loaded.handle);
 			} catch {
 				/* ignore */
+			}
+		},
+		async setPosition(position) {
+			try {
+				const loaded = await ensureLoaded();
+				if (loaded) loaded.sound.setSoundPosition(loaded.handle, position);
+			} catch (err) {
+				console.warn('sfx setPosition failed', err);
 			}
 		},
 		load: ensureLoaded,

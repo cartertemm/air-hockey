@@ -28,6 +28,11 @@ export function stopSound(handle) {
 	handle.stop?.();
 }
 
+export function setSoundPosition(handle, position) {
+	if (!handle) return;
+	handle.position = position;
+}
+
 export function getCacophony() {
 	return cacophony;
 }
