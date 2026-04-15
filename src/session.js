@@ -30,6 +30,7 @@ import {
 	lobbySubscribe,
 	lobbyUnsubscribe,
 } from 'network/protocol.js';
+import { sfx } from './sfx.js';
 
 const ROOM_ERROR_MESSAGES = {
 	[ERR.ROOM_FULL]:         'That room just filled up. Pick another or create a new one.',
@@ -37,55 +38,10 @@ const ROOM_ERROR_MESSAGES = {
 	[ERR.ROOM_NOT_FOUND]:    'That room no longer exists.',
 };
 
-// Lazily loaded so cacophony and the .ogg asset are never pulled into tests
-// (no test clicks Play). The dynamic imports also defer cacophony's AudioContext
-// construction until after the user gesture that opens the speaker-test screen.
-async function playSpeakerTest() {
-	try {
-		const [sound, urlMod] = await Promise.all([
-			import('./sound.js'),
-			import('../sounds/speaker_test.ogg?url'),
-		]);
-		await sound.initSound();
-		const handle = await sound.loadSound(urlMod.default);
-		sound.playSound(handle);
-	} catch (err) {
-		console.warn('speaker test failed', err);
-	}
-}
-
-let notificationSoundsPromise = null;
-function loadNotificationSounds() {
-	if (notificationSoundsPromise) return notificationSoundsPromise;
-	if (typeof AudioContext === 'undefined' && typeof webkitAudioContext === 'undefined') {
-		notificationSoundsPromise = Promise.resolve(null);
-		return notificationSoundsPromise;
-	}
-	notificationSoundsPromise = (async () => {
-		const [sound, connectUrl, disconnectUrl] = await Promise.all([
-			import('./sound.js'),
-			import('../sounds/connect_notification.ogg?url'),
-			import('../sounds/disconnect_notification.ogg?url'),
-		]);
-		await sound.initSound();
-		const [connect, disconnect] = await Promise.all([
-			sound.loadSound(connectUrl.default),
-			sound.loadSound(disconnectUrl.default),
-		]);
-		return { play: sound.playSound, connect, disconnect };
-	})();
-	return notificationSoundsPromise;
-}
-
-async function playNotification(kind) {
-	try {
-		const sounds = await loadNotificationSounds();
-		if (!sounds) return;
-		sounds.play(kind === 'connect' ? sounds.connect : sounds.disconnect);
-	} catch (err) {
-		console.warn('notification sound failed', err);
-	}
-}
+const speakerTest          = sfx(() => import('../sounds/speaker_test.ogg?url'));
+const connectNotification  = sfx(() => import('../sounds/connect_notification.ogg?url'));
+const disconnectNotification = sfx(() => import('../sounds/disconnect_notification.ogg?url'));
+const tableLoop            = sfx(() => import('../sounds/table_loop.ogg?url'));
 
 // startSession accepts dependency overrides for tests. Call sites in app code
 // pass no options; tests inject createClient/isIOS fakes.
@@ -145,7 +101,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 				onDisconnect:    () => {
 					const c = client;
 					client = null;
-					playNotification('disconnect');
+					disconnectNotification.play();
 					go(screenOfflineMenu());
 					c?.close();
 				},
@@ -222,7 +178,9 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 	function screenWaitingRoom(room) {
 		const me = findMe(room);
 		const localReady = me?.ready ?? false;
+		tableLoop.play({ loop: 'infinite' });
 		const leave = () => {
+			tableLoop.stop();
 			client?.send(roomLeave());
 			go(screenOnlineMenu());
 		};
@@ -240,6 +198,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 			onMessage: (msg) => {
 				if (msg.type === MSG.ROOM_STATE) {
 					if (msg.room.phase === 'ready') {
+						tableLoop.stop();
 						go(screenHandoff(msg.room));
 					} else {
 						go(screenWaitingRoom(msg.room));
@@ -303,7 +262,8 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 
 	function screenConnecting() {
 		welcomeSeen = false;
-		loadNotificationSounds().catch(() => {});
+		connectNotification.load().catch(() => {});
+		disconnectNotification.load().catch(() => {});
 		// Capture myClient so stale close handlers from abandoned connection
 		// attempts (disconnect, cancel, retry) can tell themselves apart from
 		// the current active client. Without this, a real WebSocket's async
@@ -322,7 +282,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 			onClose: () => {
 				if (client !== myClient) return;
 				if (welcomeSeen) {
-					playNotification('disconnect');
+					disconnectNotification.play();
 					return;
 				}
 				client = null;
@@ -372,7 +332,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 		return {
 			screen: 'testSpeakers',
 			props: {
-				onPlay: () => playSpeakerTest(),
+				onPlay: () => speakerTest.play(),
 				onBack: back,
 			},
 			onEscape: back,
@@ -432,7 +392,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 			setIdentityFromWelcome(msg);
 			if (!welcomeSeen) {
 				welcomeSeen = true;
-				playNotification('connect');
+				connectNotification.play();
 				go(screenOnlineMenu());
 			}
 			return;

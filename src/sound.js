@@ -23,6 +23,11 @@ export function playSound(handle, options = {}) {
 	handle.play();
 }
 
+export function stopSound(handle) {
+	if (!handle) return;
+	handle.stop?.();
+}
+
 export function getCacophony() {
 	return cacophony;
 }
