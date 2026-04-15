@@ -125,7 +125,7 @@ describe('setReady / setConfirmed / countdown', () => {
 		expect(room.phase).toBe('waiting');
 	});
 
-	test('setConfirmed on both members flips phase to countdown and broadcasts room:countdown', () => {
+	test('setConfirmed on both members starts gameplay and broadcasts room:countdown', () => {
 		const room = createRoom(makePlayer('h'), { mode: 'single', pointLimit: 7 });
 		const j = makePlayer('j');
 		room.addMember(j);
@@ -136,7 +136,8 @@ describe('setReady / setConfirmed / countdown', () => {
 		j.socket.sent.length = 0;
 		room.setConfirmed(h);
 		room.setConfirmed(j);
-		expect(room.phase).toBe('countdown');
+		expect(room.phase).toBe('playing');
+		expect(room.game).toBeDefined();
 		expect(sentTypes(h)).toContain(MSG.ROOM_COUNTDOWN);
 		expect(sentTypes(j)).toContain(MSG.ROOM_COUNTDOWN);
 	});

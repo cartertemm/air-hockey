@@ -1,8 +1,10 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, beforeEach } from 'vitest';
 import { GameSession } from '../server/gameSession.js';
 import { MSG } from '../network/protocol.js';
 import { MALLET_RADIUS, TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
 import { State } from '../src/stateMachine.js';
+import { Room, _resetRooms } from '../server/room.js';
+import { Player, _resetPlayers } from '../server/player.js';
 
 function makeFakePlayer(clientId) {
 	return { clientId, sent: [], send(msg) { this.sent.push(msg); } };
@@ -14,6 +16,11 @@ function makeSession() {
 	const session = new GameSession({ p1, p2, pointLimit: 7 });
 	return { p1, p2, session };
 }
+
+beforeEach(() => {
+	_resetRooms();
+	_resetPlayers();
+});
 
 describe('GameSession input', () => {
 	test('applyInput clamps p1 into south half', () => {
@@ -171,5 +178,49 @@ describe('GameSession snapshots', () => {
 		expect(snap.scores).toEqual({ p1: { points: 0 }, p2: { points: 0 } });
 		expect(Array.isArray(snap.events)).toBe(true);
 		expect(session.pendingEvents).toEqual([]);
+	});
+});
+
+describe('Room ↔ GameSession wiring', () => {
+	test('second confirm starts a GameSession and phase becomes playing', () => {
+		const p1 = new Player({ clientId: '1', sessionToken: 'x', name: 'a', socket: { send() {} } });
+		const p2 = new Player({ clientId: '2', sessionToken: 'y', name: 'b', socket: { send() {} } });
+		const room = new Room({ id: 'r1', host: p1, mode: 'singleMatch', pointLimit: 7 });
+		room.addMember(p2);
+		room.setReady(p1, true);
+		room.setReady(p2, true);
+		room.setConfirmed(p1);
+		room.setConfirmed(p2);
+		expect(room.phase).toBe('playing');
+		expect(room.game).toBeDefined();
+	});
+
+	test('match end resets room to waiting and clears ready/confirmed', () => {
+		const p1 = new Player({ clientId: '1', sessionToken: 'x', name: 'a', socket: { send() {} } });
+		const p2 = new Player({ clientId: '2', sessionToken: 'y', name: 'b', socket: { send() {} } });
+		const room = new Room({ id: 'r1', host: p1, mode: 'singleMatch', pointLimit: 1 });
+		room.addMember(p2);
+		room.setReady(p1, true);
+		room.setReady(p2, true);
+		room.setConfirmed(p1);
+		room.setConfirmed(p2);
+		room.game.onEnd({ winner: 'p1', finalScore: { p1: 1, p2: 0 } });
+		expect(room.phase).toBe('waiting');
+		expect(room.game).toBeNull();
+		expect(room.isReady(p1)).toBe(false);
+		expect(room.isConfirmed(p1)).toBe(false);
+	});
+
+	test('disconnect mid-match tears down the session', () => {
+		const p1 = new Player({ clientId: '1', sessionToken: 'x', name: 'a', socket: { send() {} } });
+		const p2 = new Player({ clientId: '2', sessionToken: 'y', name: 'b', socket: { send() {} } });
+		const room = new Room({ id: 'r1', host: p1, mode: 'singleMatch', pointLimit: 7 });
+		room.addMember(p2);
+		room.setReady(p1, true);
+		room.setReady(p2, true);
+		room.setConfirmed(p1);
+		room.setConfirmed(p2);
+		room.removeMember(p2, { disconnected: true });
+		expect(room.game).toBeNull();
 	});
 });

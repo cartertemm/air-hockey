@@ -1,4 +1,5 @@
 import { MSG, ERR, roomState, roomCountdown, lobbyUpdate } from '../network/protocol.js';
+import { GameSession } from './gameSession.js';
 
 const ADJECTIVES = ['swift', 'brave', 'quiet', 'bright', 'calm', 'wild'];
 const NOUNS      = ['otter', 'falcon', 'comet', 'ember', 'river', 'spark'];
@@ -17,6 +18,7 @@ export class Room {
 		this.confirmed = new WeakSet();
 		this.createdAt = Date.now();
 		host.room = this;
+		this.game = null;
 	}
 
 	addMember(player) {
@@ -34,11 +36,15 @@ export class Room {
 		this.ready.delete(player);
 		this.confirmed.delete(player);
 		player.room = null;
+		if (this.game) {
+			this.game.stopRealTimeLoop();
+			this.game = null;
+		}
 		for (const m of this.members) {
 			this.ready.delete(m);
 			this.confirmed.delete(m);
 		}
-		if (this.phase !== 'playing') this.phase = 'waiting';
+		this.phase = 'waiting';
 		if (this.members.length === 0) {
 			destroyRoom(this);
 			return;
@@ -62,6 +68,7 @@ export class Room {
 		if (this.allConfirmed()) {
 			this.phase = 'countdown';
 			this.broadcastCountdown();
+			this.startGame();
 		}
 		this.broadcastState();
 		broadcastLobbyUpdate();
@@ -103,6 +110,34 @@ export class Room {
 	broadcastCountdown() {
 		for (const m of this.members) m.send(roomCountdown({ roomId: this.id }));
 	}
+
+	startGame() {
+		const [host, guest] = this.members;
+		this.game = new GameSession({
+			p1: host,
+			p2: guest,
+			pointLimit: this.pointLimit,
+			onEnd: ({ winner, finalScore }) => this._finishGame({ winner, finalScore }),
+		});
+		this.phase = 'playing';
+		this.game.start({ now: 0 });
+		this.game.startRealTimeLoop();
+		this.broadcastState();
+	}
+
+	_finishGame({ winner, finalScore }) {
+		if (!this.game) return;
+		this.game.sendGameEnd({ winner, finalScore });
+		this.game.stopRealTimeLoop();
+		this.game = null;
+		for (const member of this.members) {
+			this.ready.delete(member);
+			this.confirmed.delete(member);
+		}
+		this.phase = 'waiting';
+		this.broadcastState();
+		broadcastLobbyUpdate();
+	}
 }
 
 export class RoomError extends Error {
@@ -127,6 +162,8 @@ export function createRoom(host, { mode, pointLimit }) {
 }
 
 export function destroyRoom(room) {
+	room.game?.stopRealTimeLoop();
+	room.game = null;
 	byId.delete(room.id);
 	broadcastLobbyUpdate();
 }
@@ -167,6 +204,10 @@ function mintRoomId() {
 
 // Test-only: reset everything between specs.
 export function _resetRooms() {
+	for (const room of byId.values()) {
+		room.game?.stopRealTimeLoop();
+		room.game = null;
+	}
 	byId.clear();
 	lobbySubscribers.clear();
 }
