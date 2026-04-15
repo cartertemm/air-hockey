@@ -171,6 +171,12 @@ const SCREENS = {
 		]);
 	},
 
+	gameplay(root) {
+		const region = el('main', { role: 'region', 'aria-label': 'gameplay' });
+		root.innerHTML = '';
+		root.appendChild(region);
+	},
+
 	handoffIos(root, props) {
 		mount(root, [
 			el('h1', { text: 'Almost ready' }),

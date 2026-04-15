@@ -729,7 +729,7 @@ describe('session: handoff and countdown', () => {
 		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(true);
 	});
 
-	test('ROOM_COUNTDOWN advances to the countdown screen', async () => {
+	test('ROOM_COUNTDOWN advances to the gameplay screen', async () => {
 		const { root, factory } = await openOnlineMenu();
 		clickText(root, 'Create game');
 		clickText(root, 'Create');
@@ -745,7 +745,8 @@ describe('session: handoff and countdown', () => {
 			}),
 		});
 		factory.fireMessage({ type: MSG.ROOM_COUNTDOWN, roomId: 'swift-otter-42' });
-		expect(root.querySelector('h1').textContent).toBe('Starting');
+		const region = root.querySelector('main[role="region"][aria-label="gameplay"]');
+		expect(region).toBeTruthy();
 	});
 
 	test('opponent unready during handoff reverts to the waiting room', async () => {

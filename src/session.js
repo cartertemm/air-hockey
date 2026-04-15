@@ -77,6 +77,20 @@ function loadNotificationSounds() {
 	return notificationSoundsPromise;
 }
 
+let gameBundlePromise = null;
+async function loadGameBundle() {
+	if (gameBundlePromise) return gameBundlePromise;
+	gameBundlePromise = (async () => {
+		const [gameMod, audioMod, sound] = await Promise.all([
+			import('./game.js'),
+			import('./audio/gameAudio.js'),
+			import('./sound.js'),
+		]);
+		return { Game: gameMod.Game, createGameAudio: audioMod.createGameAudio, sound };
+	})();
+	return gameBundlePromise;
+}
+
 async function playNotification(kind) {
 	try {
 		const sounds = await loadNotificationSounds();
@@ -274,7 +288,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 					return true;
 				}
 				if (msg.type === MSG.ROOM_COUNTDOWN) {
-					go(screenCountdown(msg.roomId ?? room.id));
+					go(screenGameplay(msg.roomId ?? room.id));
 					return true;
 				}
 				return false;
@@ -282,10 +296,46 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 		};
 	}
 
-	function screenCountdown(roomId) {
+	function screenGameplay(roomId) {
+		let game = null;
+		let audio = null;
+		let disposed = false;
+		const pendingMessages = [];
+		(async () => {
+			const { Game, createGameAudio, sound } = await loadGameBundle();
+			if (disposed) return;
+			game = new Game({ socket: client });
+			audio = await createGameAudio({ sound });
+			if (disposed) {
+				audio.dispose();
+				return;
+			}
+			audio.attach(game);
+			for (const msg of pendingMessages.splice(0)) {
+				game.client.handleMessage(msg);
+			}
+		})();
 		return {
-			screen: 'countdown',
+			screen: 'gameplay',
 			props: { roomId },
+			onDispose: () => {
+				disposed = true;
+				audio?.dispose();
+			},
+			onMessage: (msg) => {
+				if (msg.type === MSG.GAME_START || msg.type === MSG.GAME_SNAPSHOT || msg.type === MSG.GAME_END) {
+					if (game) game.client.handleMessage(msg);
+					else pendingMessages.push(msg);
+					return true;
+				}
+				if (msg.type === MSG.ROOM_STATE) {
+					if (msg.room.phase === 'waiting') {
+						go(screenWaitingRoom(msg.room));
+					}
+					return true;
+				}
+				return false;
+			},
 		};
 	}
 
