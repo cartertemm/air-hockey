@@ -77,3 +77,59 @@ describe('GameSession physics', () => {
 		expect(types).toContain('puck:mallet_hit');
 	});
 });
+
+describe('GameSession lifecycle', () => {
+	test('start() emits countdown events, then SERVE after 3s', () => {
+		const { session } = makeSession();
+		session.start({ now: 0, firstServer: 'p1' });
+		expect(session.stateMachine.state).toBe(State.COUNTDOWN);
+		expect(session.pendingEvents.some(event => event.type === 'game:countdown' && event.seconds === 3)).toBe(true);
+		session.advanceTo(1000);
+		session.advanceTo(2000);
+		session.advanceTo(3000);
+		expect(session.stateMachine.state).toBe(State.SERVE);
+		const counts = session.pendingEvents
+			.filter(event => event.type === 'game:countdown')
+			.map(event => event.seconds);
+		expect(counts).toEqual([3, 2, 1, 0]);
+	});
+
+	test('goal transitions to GOAL, holds 2s, then SERVE with scored-on player serving', () => {
+		const { session } = makeSession();
+		session.start({ now: 0, firstServer: 'p1' });
+		session.advanceTo(3000);
+		session._setState(State.PLAYING);
+		session.physicsState.puck.x = 24;
+		session.physicsState.puck.y = 94;
+		session.physicsState.puck.vy = 30;
+		session.tick(1 / 120);
+		expect(session.stateMachine.state).toBe(State.GOAL);
+		expect(session.stateMachine.scores.p1.points).toBe(1);
+		session.advanceTo(5010);
+		expect(session.stateMachine.state).toBe(State.SERVE);
+		expect(session.stateMachine.servingPlayer).toBe('p2');
+	});
+
+	test('match end triggers onEnd callback with winner', () => {
+		const endings = [];
+		const p1 = makeFakePlayer('a');
+		const p2 = makeFakePlayer('b');
+		const session = new GameSession({
+			p1,
+			p2,
+			pointLimit: 1,
+			onEnd: (info) => endings.push(info),
+		});
+		session.start({ now: 0, firstServer: 'p1' });
+		session.advanceTo(3000);
+		session._setState(State.PLAYING);
+		session.physicsState.puck.x = 24;
+		session.physicsState.puck.y = 94;
+		session.physicsState.puck.vy = 30;
+		session.tick(1 / 120);
+		session.advanceTo(5010);
+		expect(endings).toHaveLength(1);
+		expect(endings[0].winner).toBe('p1');
+		expect(endings[0].finalScore).toEqual({ p1: 1, p2: 0 });
+	});
+});
