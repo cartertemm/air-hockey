@@ -1,6 +1,7 @@
 import { describe, test, expect } from 'vitest';
 import { GameSession } from '../server/gameSession.js';
 import { MALLET_RADIUS, TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
+import { State } from '../src/stateMachine.js';
 
 function makeFakePlayer(clientId) {
 	return { clientId, sent: [], send(msg) { this.sent.push(msg); } };
@@ -43,5 +44,36 @@ describe('GameSession input', () => {
 		const m = session.physicsState.mallets.p1;
 		expect(m.vx).toBeCloseTo(0.5 / dt, 3);
 		expect(m.vy).toBeCloseTo(0, 3);
+	});
+});
+
+describe('GameSession physics', () => {
+	test('puck does not move when state is COUNTDOWN', () => {
+		const { session } = makeSession();
+		session.physicsState.puck.vx = 50;
+		session.tick(1 / 120);
+		expect(session.physicsState.puck.x).toBe(TABLE_WIDTH / 2);
+	});
+
+	test('puck moves in PLAYING state', () => {
+		const { session } = makeSession();
+		session._setState(State.PLAYING);
+		session.physicsState.puck.vx = 60;
+		const dt = 1 / 120;
+		session.tick(dt);
+		expect(session.physicsState.puck.x).toBeGreaterThan(TABLE_WIDTH / 2);
+	});
+
+	test('mallet-puck collision fires puck:mallet_hit event', () => {
+		const { session } = makeSession();
+		session._setState(State.PLAYING);
+		session.physicsState.puck.x = 24;
+		session.physicsState.puck.y = 20;
+		session.inputBuffer.p1 = { x: 24, y: 22, onTable: true };
+		session.tick(1 / 120);
+		session.inputBuffer.p1 = { x: 24, y: 19, onTable: true };
+		session.tick(1 / 120);
+		const types = session.drainPendingEvents().map(e => e.type);
+		expect(types).toContain('puck:mallet_hit');
 	});
 });

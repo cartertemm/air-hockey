@@ -1,4 +1,6 @@
-import { createPuck, createMallet, MALLET_RADIUS, TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
+import { createPuck, createMallet, step as physicsStep, MALLET_RADIUS, TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
+import { EventEmitter } from '../src/events.js';
+import { GameStateMachine, State } from '../src/stateMachine.js';
 
 const HALF = TABLE_LENGTH / 2;
 
@@ -25,10 +27,36 @@ export class GameSession {
 			p2: { x: this.physicsState.mallets.p2.x, y: this.physicsState.mallets.p2.y, onTable: false },
 		};
 		this.tickCount = 0;
+		this.emitter = new EventEmitter();
+		this.stateMachine = new GameStateMachine({ pointLimit: this.pointLimit }, this.emitter);
+		this.pendingEvents = [];
+		this._wireEvents();
 	}
 
 	applyInput(player, { x, y, onTable }) {
 		this.inputBuffer[player] = { x, y, onTable };
+	}
+
+	_wireEvents() {
+		const push = (type) => (data) => this.pendingEvents.push({ type, ...data });
+		this.emitter.on('puck:mallet_hit', push('puck:mallet_hit'));
+		this.emitter.on('puck:wall_bounce', push('puck:wall_bounce'));
+		this.emitter.on('puck:off_table', push('puck:off_table'));
+		this.emitter.on('puck:goal', push('puck:goal'));
+		this.emitter.on('goal:scored', push('goal:scored'));
+		this.emitter.on('game:start', push('game:start'));
+		this.emitter.on('match:end', push('match:end'));
+		this.emitter.on('serve:assigned', push('serve:assigned'));
+	}
+
+	_setState(next) {
+		this.stateMachine.state = next;
+	}
+
+	drainPendingEvents() {
+		const drained = this.pendingEvents;
+		this.pendingEvents = [];
+		return drained;
 	}
 
 	tick(dt) {
@@ -45,6 +73,10 @@ export class GameSession {
 				mallet.vx = (mallet.x - prevX) / dt;
 				mallet.vy = (mallet.y - prevY) / dt;
 			}
+		}
+		const s = this.stateMachine.state;
+		if (s === State.PLAYING || s === State.SERVE) {
+			physicsStep(this.physicsState, dt, this.emitter);
 		}
 		this.tickCount++;
 	}
