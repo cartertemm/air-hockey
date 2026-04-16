@@ -54,6 +54,9 @@ export function sfx(urlImporter) {
 				if (myEpoch === epoch && options.loop) looping = false;
 			}
 		},
+		isLooping() {
+			return looping && currentInst?.isPlaying !== false;
+		},
 		async stop() {
 			epoch++;
 			looping = false;

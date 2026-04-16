@@ -49,8 +49,6 @@ export async function preloadGameAudio() {
 export function createGameAudio({ sounds = defaultSounds } = {}) {
 	let localPlayer = 'p1';
 	let active = false;
-	let tableLoopRunning = false;
-	let puckLoopRunning = false;
 	let detachListeners = () => {};
 
 	function shouldRunTableLoop(state) {
@@ -58,8 +56,7 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 	}
 
 	function ensureTableLoop() {
-		if (!tableLoopRunning) {
-			tableLoopRunning = true;
+		if (!sounds.tableLoop.isLooping()) {
 			sounds.tableLoop.play({ loop: 'infinite', volume: VOL.tableLoop });
 		}
 	}
@@ -101,24 +98,21 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 	function onSnapshot(snapshot) {
 		if (!active) return;
 		if (shouldRunTableLoop(snapshot.state)) ensureTableLoop();
-		if (snapshot.puck?.onTable && !puckLoopRunning) {
-			puckLoopRunning = true;
-			sounds.puckLoop.play({
-				loop: 'infinite',
-				volume: VOL.puckLoop,
-				pan: panFor(localPlayer, snapshot.puck.x),
-			});
-		}
-		if (puckLoopRunning && snapshot.puck) {
-			sounds.puckLoop.update({ pan: panFor(localPlayer, snapshot.puck.x) });
-		}
-		if (puckLoopRunning && !snapshot.puck?.onTable) {
+		if (snapshot.puck?.onTable) {
+			if (!sounds.puckLoop.isLooping()) {
+				sounds.puckLoop.play({
+					loop: 'infinite',
+					volume: VOL.puckLoop,
+					pan: panFor(localPlayer, snapshot.puck.x),
+				});
+			} else {
+				sounds.puckLoop.update({ pan: panFor(localPlayer, snapshot.puck.x) });
+			}
+		} else if (sounds.puckLoop.isLooping()) {
 			sounds.puckLoop.stop();
-			puckLoopRunning = false;
 		}
-		if (snapshot.state === 'MATCH_END' && tableLoopRunning) {
+		if (snapshot.state === 'MATCH_END' && sounds.tableLoop.isLooping()) {
 			sounds.tableLoop.stop();
-			tableLoopRunning = false;
 		}
 	}
 
@@ -145,14 +139,8 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 		dispose() {
 			active = false;
 			detachListeners();
-			if (tableLoopRunning) {
-				sounds.tableLoop.stop();
-				tableLoopRunning = false;
-			}
-			if (puckLoopRunning) {
-				sounds.puckLoop.stop();
-				puckLoopRunning = false;
-			}
+			sounds.tableLoop.stop();
+			sounds.puckLoop.stop();
 		},
 	};
 }
