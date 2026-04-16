@@ -295,6 +295,8 @@ describe('game audio loops', () => {
 			puck: { onTable: false, x: 24 },
 		});
 		expect(sounds.tableLoop.play).toHaveBeenCalledTimes(2);
+		// Pitch ramp is a one-shot spin-up, not a restart signal.
+		expect(sounds.tableLoop.rampPitch).toHaveBeenCalledTimes(1);
 	});
 });
 

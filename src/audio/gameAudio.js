@@ -68,9 +68,11 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 	let localPlayer = 'p1';
 	let active = false;
 	let detachListeners = () => {};
+	// The spin-up ramp is a one-shot startup effect, not a restart signal —
+	// if the loop is killed (MATCH_END, externally) and comes back later,
+	// it resumes at normal pitch.
+	let tableLoopHasRamped = false;
 
-	// Table loop starts after the countdown ends, to mimic a real air hockey
-	// table's air jets spinning up once play begins — hence the pitch ramp.
 	function isActivePlay(state) {
 		return state === 'SERVE' || state === 'PLAYING' || state === 'PAUSED';
 	}
@@ -78,7 +80,10 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 	function ensureTableLoop() {
 		if (!sounds.tableLoop.isLooping()) {
 			sounds.tableLoop.play({ loop: 'infinite', volume: VOL.tableLoop });
-			sounds.tableLoop.rampPitch({ from: TABLE_LOOP_START_PITCH, to: 1, durationMs: TABLE_LOOP_RAMP_MS });
+			if (!tableLoopHasRamped) {
+				sounds.tableLoop.rampPitch({ from: TABLE_LOOP_START_PITCH, to: 1, durationMs: TABLE_LOOP_RAMP_MS });
+				tableLoopHasRamped = true;
+			}
 		}
 	}
 
