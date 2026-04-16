@@ -41,21 +41,16 @@ describe('speech: init', () => {
 describe('speech: mode', () => {
 	beforeEach(() => initSpeech());
 
-	test('default mode is aria when not in iOS standalone', () => {
+	test('default mode is aria on non-iOS platforms', () => {
 		expect(getSpeechMode()).toBe(SPEECH_MODE_ARIA);
 	});
 
-	test('default mode is tts in iOS standalone', () => {
+	test('default mode is tts on iOS (standalone and in-browser)', () => {
 		Object.defineProperty(window.navigator, 'userAgent', {
 			value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
 			configurable: true,
 		});
-		Object.defineProperty(window.navigator, 'standalone', {
-			value: true,
-			configurable: true,
-		});
 		expect(getSpeechMode()).toBe(SPEECH_MODE_TTS);
-		delete window.navigator.standalone;
 		Object.defineProperty(window.navigator, 'userAgent', { value: '', configurable: true });
 	});
 

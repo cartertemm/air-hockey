@@ -1,5 +1,5 @@
 import * as settings from './settings.js';
-import { isIOSStandalone } from './platform.js';
+import { isIOS } from './platform.js';
 
 export const SPEECH_MODE_ARIA = 'aria';
 export const SPEECH_MODE_TTS  = 'tts';
@@ -57,8 +57,13 @@ export function speak(text, interrupt = false) {
 	}
 }
 
+// iOS: the pre-game screens use native HTML/VoiceOver, but gameplay requires
+// VoiceOver to be off (it intercepts multi-finger gestures). With VO off, the
+// aria-live regions announce into the void — so gameplay announcements (the
+// countdown, goals, match end) must go through TTS. We force TTS for all iOS,
+// not just standalone, because iOS Safari has the same VO conflict.
 function defaultMode() {
-	return isIOSStandalone() ? SPEECH_MODE_TTS : SPEECH_MODE_ARIA;
+	return isIOS() ? SPEECH_MODE_TTS : SPEECH_MODE_ARIA;
 }
 
 export function setSpeechMode(mode) {
