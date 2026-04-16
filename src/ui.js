@@ -34,7 +34,7 @@ const SCREENS = {
 		mount(root, [
 			el('h1', { text: 'Install for the best experience' }),
 			el('p', { text: 'It looks like this site is being visited in your browser. We highly recommend adding it to your home screen — the in-browser experience has address-bar clutter, inconsistent gesture handling with VoiceOver, and the audio can be suspended when the tab is backgrounded.' }),
-			el('p', { text: 'To install: tap the Share button in the Safari toolbar, then choose Add to Home Screen. Launch the site from your home screen and it will run full-screen, like a native app.' }),
+			el('p', { text: 'To install: tap the More button followed by the Share button in the Safari toolbar, then choose View More followed by Add to Home Screen. Launch the site from your home screen and it will run full-screen, like a native app.' }),
 			el('button', { text: 'Continue anyway', onClick: props.onContinue, autoFocus: true }),
 		]);
 	},
