@@ -23,6 +23,7 @@ export default defineConfig(({ mode }) => {
 			},
 		},
 		server: {
+			host: env.VITE_HOST ?? '0.0.0.0',
 			https: httpsConfig(),
 			proxy: {
 				'/ws': {

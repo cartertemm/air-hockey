@@ -57,6 +57,22 @@ function setupRoot() {
 	return root;
 }
 
+function deferred() {
+	let resolve;
+	let reject;
+	const promise = new Promise((res, rej) => {
+		resolve = res;
+		reject = rej;
+	});
+	return { promise, resolve, reject };
+}
+
+async function flushAsyncWork() {
+	for (let i = 0; i < 4; i++) await Promise.resolve();
+	await new Promise(resolve => setTimeout(resolve, 0));
+	for (let i = 0; i < 4; i++) await Promise.resolve();
+}
+
 beforeEach(() => {
 	document.body.innerHTML = '';
 	clearIdentity();
@@ -705,13 +721,211 @@ describe('session: waiting room', () => {
 			}),
 		});
 		expect(root.querySelector('h1').textContent).toBe('Almost ready');
-		expect(root.querySelector('p').textContent).toMatch(/Press Enter/);
+		expect(root.querySelector('p').textContent).toMatch(/Continue/);
+		expect([...root.querySelectorAll('button')].some(b => b.textContent === 'Continue')).toBe(true);
+	});
+
+	test('joining player sees a waiting handoff without Continue', async () => {
+		const { root, factory } = await openOnlineMenu({ clientId: 'c2' });
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom({ members: [
+			{ clientId: 'c1', name: 'A', ready: false, confirmed: false, connected: true },
+			{ clientId: 'c2', name: 'B', ready: false, confirmed: false, connected: true },
+		] }) });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		expect(root.querySelector('h1').textContent).toBe('Waiting for player 1');
+		expect(root.querySelector('p').textContent).toMatch(/Waiting for player 1/);
+		expect([...root.querySelectorAll('button')].some(b => b.textContent === 'Continue')).toBe(false);
 	});
 });
 
 describe('session: handoff and countdown', () => {
+	test('clicking Continue on desktop handoff sends roomConfirm', async () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const factory = makeFakeClient();
+		startSession({
+			root,
+			createClient: factory,
+			isIOS: () => false,
+			loadGameplay: async () => ({
+				Game: class {},
+				sound: {},
+				createGameAudio: async () => ({ attach() {}, dispose() {} }),
+				preloadGameAudio: async () => {},
+			}),
+		});
+		root.querySelector('button').click();
+		await Promise.resolve();
+		factory.fireMessage({
+			type: MSG.WELCOME,
+			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
+		});
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		clickText(root, 'Continue');
+		await flushAsyncWork();
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(true);
+	});
+
+	test('clicking Continue waits for gameplay preload before sending roomConfirm', async () => {
+		const preload = deferred();
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const factory = makeFakeClient();
+		startSession({
+			root,
+			createClient: factory,
+			isIOS: () => false,
+			loadGameplay: () => preload.promise,
+		});
+		root.querySelector('button').click();
+		await Promise.resolve();
+		factory.fireMessage({
+			type: MSG.WELCOME,
+			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
+		});
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		clickText(root, 'Continue');
+		await Promise.resolve();
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(false);
+		preload.resolve({
+			Game: class {},
+			sound: {},
+			createGameAudio: async () => ({ attach() {}, dispose() {} }),
+			preloadGameAudio: async () => {},
+		});
+		await flushAsyncWork();
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(true);
+	});
+
+	test('pressing Enter on the waiting-player handoff does not send roomConfirm', async () => {
+		const { root, factory } = await openOnlineMenu({ clientId: 'c2' });
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom({ members: [
+			{ clientId: 'c1', name: 'A', ready: false, confirmed: false, connected: true },
+			{ clientId: 'c2', name: 'B', ready: false, confirmed: false, connected: true },
+		] }) });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(false);
+		expect(root.querySelector('h1').textContent).toBe('Waiting for player 1');
+	});
+
+	test('waiting player auto-confirms after gameplay preload finishes', async () => {
+		const preload = deferred();
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'B' });
+		const factory = makeFakeClient();
+		startSession({
+			root,
+			createClient: factory,
+			isIOS: () => false,
+			loadGameplay: () => preload.promise,
+		});
+		root.querySelector('button').click();
+		await Promise.resolve();
+		factory.fireMessage({
+			type: MSG.WELCOME,
+			clientId: 'c2', sessionToken: 't1', name: 'B', resumed: false,
+		});
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				members: [
+					{ clientId: 'c1', name: 'A', ready: false, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: false, confirmed: false, connected: true },
+				],
+			}),
+		});
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		await Promise.resolve();
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(false);
+		preload.resolve({
+			Game: class {},
+			sound: {},
+			createGameAudio: async () => ({ attach() {}, dispose() {} }),
+			preloadGameAudio: async () => {},
+		});
+		await flushAsyncWork();
+		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(true);
+	});
+
 	test('pressing Enter on desktop handoff sends roomConfirm', async () => {
-		const { root, factory } = await openOnlineMenu();
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const factory = makeFakeClient();
+		startSession({
+			root,
+			createClient: factory,
+			isIOS: () => false,
+			loadGameplay: async () => ({
+				Game: class {},
+				sound: {},
+				createGameAudio: async () => ({ attach() {}, dispose() {} }),
+				preloadGameAudio: async () => {},
+			}),
+		});
+		root.querySelector('button').click();
+		await Promise.resolve();
+		factory.fireMessage({
+			type: MSG.WELCOME,
+			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
+		});
 		clickText(root, 'Create game');
 		clickText(root, 'Create');
 		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
@@ -726,10 +940,11 @@ describe('session: handoff and countdown', () => {
 			}),
 		});
 		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+		await flushAsyncWork();
 		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(true);
 	});
 
-	test('ROOM_COUNTDOWN advances to the countdown screen', async () => {
+	test('ROOM_COUNTDOWN advances to the gameplay screen', async () => {
 		const { root, factory } = await openOnlineMenu();
 		clickText(root, 'Create game');
 		clickText(root, 'Create');
@@ -745,7 +960,72 @@ describe('session: handoff and countdown', () => {
 			}),
 		});
 		factory.fireMessage({ type: MSG.ROOM_COUNTDOWN, roomId: 'swift-otter-42' });
-		expect(root.querySelector('h1').textContent).toBe('Starting');
+		const region = root.querySelector('main[role="region"][aria-label="gameplay"]');
+		expect(region).toBeTruthy();
+	});
+
+	test('gameplay buffers start messages until audio is attached', async () => {
+		const audioReady = deferred();
+		const handled = [];
+		class FakeGame {
+			constructor() {
+				this.client = {
+					handleMessage: (msg) => handled.push(msg.type),
+				};
+			}
+		}
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const factory = makeFakeClient();
+		startSession({
+			root,
+			createClient: factory,
+			isIOS: () => false,
+			loadGameplay: async () => ({
+				Game: FakeGame,
+				sound: {},
+				preloadGameAudio: async () => {},
+				createGameAudio: async () => {
+					await audioReady.promise;
+					return { attach() {}, dispose() {} };
+				},
+			}),
+		});
+		root.querySelector('button').click();
+		await Promise.resolve();
+		factory.fireMessage({
+			type: MSG.WELCOME,
+			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
+		});
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		clickText(root, 'Continue');
+		await Promise.resolve();
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom({
+			phase: 'ready',
+			members: [
+				{ clientId: 'c1', name: 'A', ready: true, confirmed: true, connected: true },
+				{ clientId: 'c2', name: 'B', ready: true, confirmed: true, connected: true },
+			],
+		}) });
+		factory.fireMessage({ type: MSG.ROOM_COUNTDOWN, roomId: 'swift-otter-42' });
+		factory.fireMessage({ type: MSG.GAME_START, localPlayer: 'p1', pointLimit: 7 });
+		factory.fireMessage({ type: MSG.GAME_SNAPSHOT, tick: 0, state: 'COUNTDOWN', puck: {}, mallets: {}, scores: {}, servingPlayer: null, events: [] });
+		expect(handled).toEqual([]);
+		audioReady.resolve();
+		await flushAsyncWork();
+		expect(handled).toEqual([MSG.GAME_START, MSG.GAME_SNAPSHOT]);
 	});
 
 	test('opponent unready during handoff reverts to the waiting room', async () => {
@@ -778,7 +1058,26 @@ describe('session: handoff and countdown', () => {
 	});
 
 	test('iOS handoff shows the VoiceOver notice and Continue sends roomConfirm', async () => {
-		const { root, factory } = await openOnlineMenu({ isIOS: () => true });
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const factory = makeFakeClient();
+		startSession({
+			root,
+			createClient: factory,
+			isIOS: () => true,
+			loadGameplay: async () => ({
+				Game: class {},
+				sound: {},
+				createGameAudio: async () => ({ attach() {}, dispose() {} }),
+				preloadGameAudio: async () => {},
+			}),
+		});
+		root.querySelector('button').click();
+		await Promise.resolve();
+		factory.fireMessage({
+			type: MSG.WELCOME,
+			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
+		});
 		clickText(root, 'Create game');
 		clickText(root, 'Create');
 		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
@@ -795,6 +1094,7 @@ describe('session: handoff and countdown', () => {
 		expect(root.querySelector('h1').textContent).toBe('Almost ready');
 		expect(root.querySelector('p').textContent).toMatch(/VoiceOver/);
 		clickText(root, 'Continue');
+		await flushAsyncWork();
 		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(true);
 	});
 });

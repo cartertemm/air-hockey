@@ -125,7 +125,7 @@ describe('setReady / setConfirmed / countdown', () => {
 		expect(room.phase).toBe('waiting');
 	});
 
-	test('setConfirmed on both members flips phase to countdown and broadcasts room:countdown', () => {
+	test('host confirm waits for guest confirm before gameplay starts', () => {
 		const room = createRoom(makePlayer('h'), { mode: 'single', pointLimit: 7 });
 		const j = makePlayer('j');
 		room.addMember(j);
@@ -135,10 +135,38 @@ describe('setReady / setConfirmed / countdown', () => {
 		h.socket.sent.length = 0;
 		j.socket.sent.length = 0;
 		room.setConfirmed(h);
+		expect(room.phase).toBe('ready');
+		expect(room.game).toBeNull();
 		room.setConfirmed(j);
-		expect(room.phase).toBe('countdown');
+		expect(room.phase).toBe('playing');
+		expect(room.game).toBeDefined();
 		expect(sentTypes(h)).toContain(MSG.ROOM_COUNTDOWN);
 		expect(sentTypes(j)).toContain(MSG.ROOM_COUNTDOWN);
+	});
+
+	test('guest confirm alone does not start gameplay', () => {
+		const room = createRoom(makePlayer('h'), { mode: 'single', pointLimit: 7 });
+		const j = makePlayer('j');
+		room.addMember(j);
+		const [h] = room.members;
+		room.setReady(h, true);
+		room.setReady(j, true);
+		room.setConfirmed(j);
+		expect(room.phase).toBe('ready');
+		expect(room.game).toBeNull();
+	});
+
+	test('guest confirm followed by host confirm starts gameplay', () => {
+		const room = createRoom(makePlayer('h'), { mode: 'single', pointLimit: 7 });
+		const j = makePlayer('j');
+		room.addMember(j);
+		const [h] = room.members;
+		room.setReady(h, true);
+		room.setReady(j, true);
+		room.setConfirmed(j);
+		room.setConfirmed(h);
+		expect(room.phase).toBe('playing');
+		expect(room.game).toBeDefined();
 	});
 });
 

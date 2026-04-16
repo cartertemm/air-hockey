@@ -9,11 +9,16 @@ export const MSG = Object.freeze({
 	ROOM_READY:        'room:ready',
 	ROOM_UNREADY:      'room:unready',
 	ROOM_CONFIRM:      'room:confirm',
+	INPUT:             'input',
+	SCORE_READOUT:     'score:readout',
 	// Server -> Client
 	WELCOME:           'welcome',
 	LOBBY_UPDATE:      'lobby:update',
 	ROOM_STATE:        'room:state',
 	ROOM_COUNTDOWN:    'room:countdown',
+	GAME_START:        'game:start',
+	GAME_SNAPSHOT:     'game:snapshot',
+	GAME_END:          'game:end',
 	ERROR:             'error',
 });
 
@@ -92,6 +97,28 @@ export function lobbyUpdate({ full, rooms, removedIds = [] }) {
 
 export function error({ code, message }) {
 	return { type: MSG.ERROR, code, message };
+}
+
+// ---- Gameplay factories -------------------------------------------------
+
+export function inputMsg({ tick, x, y, onTable }) {
+	return { type: MSG.INPUT, tick, x, y, onTable };
+}
+
+export function scoreReadoutMsg() {
+	return { type: MSG.SCORE_READOUT };
+}
+
+export function gameStart({ localPlayer, pointLimit }) {
+	return { type: MSG.GAME_START, localPlayer, pointLimit };
+}
+
+export function gameSnapshot({ tick, state, puck, mallets, scores, servingPlayer, events }) {
+	return { type: MSG.GAME_SNAPSHOT, tick, state, puck, mallets, scores, servingPlayer, events };
+}
+
+export function gameEnd({ winner, finalScore }) {
+	return { type: MSG.GAME_END, winner, finalScore };
 }
 
 // ---- Wire codec ----------------------------------------------------------

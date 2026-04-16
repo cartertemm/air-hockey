@@ -84,6 +84,14 @@ export function handleConnection(rawSocket) {
 			case MSG.ROOM_CONFIRM:
 				player.room?.setConfirmed(player);
 				break;
+			case MSG.INPUT:
+				player.room?.game?.applyInput(
+					player.room.members[0] === player ? 'p1' : 'p2',
+					{ x: msg.x, y: msg.y, onTable: !!msg.onTable },
+				);
+				break;
+			case MSG.SCORE_READOUT:
+				break;
 			case MSG.LOBBY_SUBSCRIBE:
 				subscribeLobby(player);
 				break;

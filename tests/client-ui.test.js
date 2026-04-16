@@ -94,6 +94,33 @@ describe('renderScreen', () => {
 		expect(retried).toBe(true);
 		expect(cancelled).toBe(true);
 	});
+
+	test('handoffDesktop renders a Continue button and focuses it', () => {
+		const root = setupRoot();
+		let confirmed = 0;
+		renderScreen(root, 'handoffDesktop', {
+			canConfirm: true,
+			onConfirm: () => { confirmed++; },
+		});
+		expect(root.querySelector('h1').textContent).toBe('Almost ready');
+		expect(root.querySelector('p').textContent).toMatch(/Continue/);
+		const button = root.querySelector('button');
+		expect(button.textContent).toBe('Continue');
+		expect(document.activeElement).toBe(button);
+		button.click();
+		expect(confirmed).toBe(1);
+	});
+
+	test('handoffDesktop hides Continue for the waiting player', () => {
+		const root = setupRoot();
+		renderScreen(root, 'handoffDesktop', {
+			canConfirm: false,
+			onConfirm: () => {},
+		});
+		expect(root.querySelector('h1').textContent).toBe('Waiting for player 1');
+		expect(root.querySelector('p').textContent).toMatch(/Waiting for player 1/);
+		expect(root.querySelector('button')).toBeNull();
+	});
 });
 
 function defaultSettingsProps(overrides = {}) {

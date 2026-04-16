@@ -3,6 +3,7 @@ import { generateName } from './names.js';
 import { renderScreen } from './ui.js';
 import { createClient as realCreateClient } from './net/client.js';
 import { isIOSStandalone } from './platform.js';
+import { initTouch, disposeTouch } from './input/touch.js';
 import {
 	initSpeech,
 	speak,
@@ -42,20 +43,50 @@ const speakerTest          = sfx(() => import('../sounds/speaker_test.ogg?url'))
 const connectNotification  = sfx(() => import('../sounds/connect_notification.ogg?url'));
 const disconnectNotification = sfx(() => import('../sounds/disconnect_notification.ogg?url'));
 const tableLoop            = sfx(() => import('../sounds/table_loop.ogg?url'));
+let gameBundlePromise = null;
+async function loadGameBundle() {
+	if (gameBundlePromise) return gameBundlePromise;
+	gameBundlePromise = (async () => {
+		const [gameMod, audioMod, sound] = await Promise.all([
+			import('./game.js'),
+			import('./audio/gameAudio.js'),
+			import('./sound.js'),
+		]);
+		return {
+			Game: gameMod.Game,
+			createGameAudio: audioMod.createGameAudio,
+			preloadGameAudio: audioMod.preloadGameAudio,
+			sound,
+		};
+	})();
+	return gameBundlePromise;
+}
 
 // startSession accepts dependency overrides for tests. Call sites in app code
 // pass no options; tests inject createClient/isIOS fakes.
-export function startSession({ root, createClient = realCreateClient, isIOS = isIOSStandalone } = {}) {
+export function startSession({ root, createClient = realCreateClient, isIOS = isIOSStandalone, loadGameplay = loadGameBundle } = {}) {
 	let state = null;
 	let currentScreen = null;
 	let client = null;
 	let welcomeSeen = false;
+	let gameplayPreparation = null;
 
 	function go(next, props = {}) {
 		currentScreen?.dispose?.();
 		state?.onDispose?.();
 		state = next;
 		currentScreen = renderScreen(root, next.screen, { ...next.props, ...props });
+	}
+
+	function prepareGameplay() {
+		if (gameplayPreparation) return gameplayPreparation;
+		gameplayPreparation = (async () => {
+			initSpeech();
+			const bundle = await loadGameplay();
+			await bundle.preloadGameAudio({ sound: bundle.sound });
+			return bundle;
+		})();
+		return gameplayPreparation;
 	}
 
 	// ---- Screen builders -------------------------------------------------
@@ -215,12 +246,26 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 			client?.send(roomLeave());
 			go(screenOnlineMenu());
 		};
-		const confirm = () => {
+		const confirm = async () => {
+			await prepareGameplay();
 			client?.send(roomConfirm());
 		};
+		const { clientId } = getIdentity();
+		const canConfirm = room.members[0]?.clientId === clientId;
+		const me = findMe(room);
+		if (!canConfirm && !me?.confirmed) {
+			prepareGameplay().then(() => {
+				if (client && state?.screen === (isIOS() ? 'handoffIos' : 'handoffDesktop')) {
+					client.send(roomConfirm());
+				}
+			}).catch((err) => {
+				console.warn('gameplay preload failed', err);
+			});
+		}
 		return {
 			screen: isIOS() ? 'handoffIos' : 'handoffDesktop',
 			props: {
+				canConfirm,
 				onContinue: confirm,
 				onConfirm:  confirm,
 			},
@@ -233,7 +278,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 					return true;
 				}
 				if (msg.type === MSG.ROOM_COUNTDOWN) {
-					go(screenCountdown(msg.roomId ?? room.id));
+					go(screenGameplay(msg.roomId ?? room.id));
 					return true;
 				}
 				return false;
@@ -241,10 +286,65 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 		};
 	}
 
-	function screenCountdown(roomId) {
+	function screenGameplay(roomId) {
+		let game = null;
+		let audio = null;
+		let disposed = false;
+		let gameplayReady = false;
+		let frameHandle = 0;
+		let lastFrameTime = 0;
+		const pendingMessages = [];
+		function step(now) {
+			if (disposed) return;
+			if (game) {
+				const dt = lastFrameTime === 0 ? 1 / 60 : Math.min((now - lastFrameTime) / 1000, 0.05);
+				game.tick?.(dt);
+				game.client.flushPending?.();
+			}
+			lastFrameTime = now;
+			frameHandle = requestAnimationFrame(step);
+		}
+		(async () => {
+			const { Game, createGameAudio, sound } = await prepareGameplay();
+			if (disposed) return;
+			initTouch({ target: root });
+			game = new Game({ socket: client });
+			frameHandle = requestAnimationFrame(step);
+			audio = await createGameAudio({ sound });
+			if (disposed) {
+				audio.dispose();
+				return;
+			}
+			audio.attach(game);
+			gameplayReady = true;
+			for (const msg of pendingMessages.splice(0)) {
+				game.client.handleMessage(msg);
+			}
+		})();
 		return {
-			screen: 'countdown',
+			screen: 'gameplay',
 			props: { roomId },
+			onDispose: () => {
+				disposed = true;
+				if (frameHandle) cancelAnimationFrame(frameHandle);
+				game?.dispose?.();
+				disposeTouch();
+				audio?.dispose();
+			},
+			onMessage: (msg) => {
+				if (msg.type === MSG.GAME_START || msg.type === MSG.GAME_SNAPSHOT || msg.type === MSG.GAME_END) {
+					if (game && gameplayReady) game.client.handleMessage(msg);
+					else pendingMessages.push(msg);
+					return true;
+				}
+				if (msg.type === MSG.ROOM_STATE) {
+					if (msg.room.phase === 'waiting') {
+						go(screenWaitingRoom(msg.room));
+					}
+					return true;
+				}
+				return false;
+			},
 		};
 	}
 
@@ -402,6 +502,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 
 	// ---- Boot ------------------------------------------------------------
 
+	initSpeech();
 	// Desktop Escape = "go back". Each screen builder that supports a back
 	// action sets onEscape on its returned record. iOS standalone is excluded
 	// because it has no physical Escape key and VoiceOver reserves Escape for
