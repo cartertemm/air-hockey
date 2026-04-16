@@ -1,5 +1,10 @@
-import { describe, test, expect, vi } from 'vitest';
+import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { createGameAudio } from '../src/audio/gameAudio.js';
+import { initSpeech } from '../src/speech.js';
+
+beforeEach(() => {
+	initSpeech();
+});
 
 function createFakeGame() {
 	const handlers = new Map();
@@ -327,16 +332,20 @@ describe('game audio one-shots', () => {
 		expect(sounds.wallSoft.play).toHaveBeenCalledTimes(1);
 	});
 
-	test('goal scored plays tiered goal sound', () => {
+	test('goal scored plays tiered goal sound', async () => {
+		const { initSpeech } = await import('../src/speech.js');
+		initSpeech();
 		const sounds = makeSounds();
 		const audio = createGameAudio({ sounds });
 		const game = createFakeGame();
 		audio.attach(game);
-		game.emit('event', { type: 'goal:scored', puckSpeed: 130 });
+		game.emit('event', { type: 'goal:scored', puckSpeed: 130, scoredBy: 'p1', p1Points: 1, p2Points: 0 });
 		expect(sounds.goal1.play).toHaveBeenCalledTimes(1);
 	});
 
-	test('off_table and serve:assigned play their sounds', () => {
+	test('off_table and serve:assigned play their sounds', async () => {
+		const { initSpeech } = await import('../src/speech.js');
+		initSpeech();
 		const sounds = makeSounds();
 		const audio = createGameAudio({ sounds });
 		const game = createFakeGame();
@@ -383,6 +392,80 @@ describe('game audio pause announcements', () => {
 		const { game } = await setup('p2');
 		game.emit('event', { type: 'game:resumed', byPlayer: 'p1', byName: 'Alice' });
 		expect(document.getElementById('sr-assertive').textContent).toBe('Game resumed by Alice.');
+	});
+});
+
+describe('game audio gameplay announcements', () => {
+	async function setup(localPlayer) {
+		const { initSpeech } = await import('../src/speech.js');
+		document.body.innerHTML = '';
+		initSpeech();
+		const sounds = makeSounds();
+		const audio = createGameAudio({ sounds });
+		const game = createFakeGame();
+		audio.attach(game);
+		game.emit('gameStart', { localPlayer, pointLimit: 7 });
+		return { game, sounds };
+	}
+
+	test('goal:scored by local player announces "You score" with current score', async () => {
+		const { game } = await setup('p1');
+		game.emit('event', { type: 'goal:scored', scoredBy: 'p1', p1Points: 1, p2Points: 0, puckSpeed: 80 });
+		expect(document.getElementById('sr-assertive').textContent).toBe('You score. 1 to 0.');
+	});
+
+	test('goal:scored by opponent announces "Opponent scores" with local-player-framed score', async () => {
+		const { game } = await setup('p2');
+		game.emit('event', { type: 'goal:scored', scoredBy: 'p1', p1Points: 3, p2Points: 2, puckSpeed: 80 });
+		expect(document.getElementById('sr-assertive').textContent).toBe('Opponent scores. 2 to 3.');
+	});
+
+	test('puck:off_table speaks a short notice', async () => {
+		const { game } = await setup('p1');
+		game.emit('event', { type: 'puck:off_table', lastTouchedBy: 'p2' });
+		expect(document.getElementById('sr-assertive').textContent).toBe('Puck off table.');
+	});
+
+	test('serve:assigned speaks "Your serve." when the local player serves', async () => {
+		const { game } = await setup('p1');
+		game.emit('event', { type: 'serve:assigned', player: 'p1' });
+		expect(document.getElementById('sr-assertive').textContent).toBe('Your serve.');
+	});
+
+	test('serve:assigned speaks "Opponent\'s serve." when the remote player serves', async () => {
+		const { game } = await setup('p1');
+		game.emit('event', { type: 'serve:assigned', player: 'p2' });
+		expect(document.getElementById('sr-assertive').textContent).toBe('Opponent\'s serve.');
+	});
+
+	test('game:end won by local player speaks "You win game." with series score', async () => {
+		const { game } = await setup('p2');
+		game.emit('event', { type: 'game:end', winner: 'p2', p1Games: 0, p2Games: 1 });
+		expect(document.getElementById('sr-assertive').textContent).toBe('You win game. 1 to 0.');
+	});
+
+	test('game:end won by opponent speaks "Opponent wins game." with series score', async () => {
+		const { game } = await setup('p1');
+		game.emit('event', { type: 'game:end', winner: 'p2', p1Games: 0, p2Games: 1 });
+		expect(document.getElementById('sr-assertive').textContent).toBe('Opponent wins game. 0 to 1.');
+	});
+
+	test('forfeit:confirmed speaks "You forfeit." when the local player forfeited', async () => {
+		const { game } = await setup('p1');
+		game.emit('event', { type: 'forfeit:confirmed', player: 'p1' });
+		expect(document.getElementById('sr-assertive').textContent).toBe('You forfeit.');
+	});
+
+	test('forfeit:confirmed speaks "Opponent forfeits." when the remote player forfeited', async () => {
+		const { game } = await setup('p1');
+		game.emit('event', { type: 'forfeit:confirmed', player: 'p2' });
+		expect(document.getElementById('sr-assertive').textContent).toBe('Opponent forfeits.');
+	});
+
+	test('gameEnd wire message speaks final score framed for the local player', async () => {
+		const { game } = await setup('p1');
+		game.emit('gameEnd', { winner: 'p1', finalScore: { p1: 7, p2: 3 } });
+		expect(document.getElementById('sr-assertive').textContent).toBe('Final score: you 7, opponent 3.');
 	});
 });
 

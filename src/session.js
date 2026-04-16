@@ -356,6 +356,9 @@ export function startSession({
 					return true;
 				}
 				if (msg.type === MSG.ROOM_STATE) {
+					if (msg.room.lastEventMessage) {
+						speak(msg.room.lastEventMessage, true);
+					}
 					if (msg.room.phase === 'waiting') {
 						go(screenWaitingRoom(msg.room));
 					}

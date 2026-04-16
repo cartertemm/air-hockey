@@ -113,16 +113,35 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 			case 'goal:scored': {
 				const key = `goal${goalTier(event.puckSpeed ?? 0)}`;
 				sounds[key].play({ volume: VOL[key] });
+				const you = localPlayer === 'p1' ? event.p1Points : event.p2Points;
+				const opp = localPlayer === 'p1' ? event.p2Points : event.p1Points;
+				const who = event.scoredBy === localPlayer ? 'You score' : 'Opponent scores';
+				speak(`${who}. ${you} to ${opp}.`, true);
 				break;
 			}
 			case 'puck:off_table':
 				sounds.offTable.play({ volume: VOL.offTable });
+				speak('Puck off table.', true);
 				break;
 			case 'serve:assigned':
 				sounds.placePuck.play({ volume: VOL.placePuck });
+				if (event.player) {
+					speak(event.player === localPlayer ? 'Your serve.' : 'Opponent\'s serve.', true);
+				}
 				break;
 			case 'match:end':
 				if (event.winner) speak(`${event.winner} wins.`, true);
+				break;
+			case 'game:end': {
+				if (!event.winner) break;
+				const you = localPlayer === 'p1' ? event.p1Games : event.p2Games;
+				const opp = localPlayer === 'p1' ? event.p2Games : event.p1Games;
+				const who = event.winner === localPlayer ? 'You win game' : 'Opponent wins game';
+				speak(`${who}. ${you} to ${opp}.`, true);
+				break;
+			}
+			case 'forfeit:confirmed':
+				speak(event.player === localPlayer ? 'You forfeit.' : 'Opponent forfeits.', true);
 				break;
 			case 'game:paused':
 				if (event.byPlayer === localPlayer) speak('Game paused.', true);
@@ -190,11 +209,18 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 			});
 			const offEvent = game.on('event', onEvent);
 			const offSnapshot = game.on('snapshot', onSnapshot);
+			const offGameEnd = game.on('gameEnd', (msg) => {
+				if (!active || !msg?.finalScore) return;
+				const you = localPlayer === 'p1' ? msg.finalScore.p1 : msg.finalScore.p2;
+				const opp = localPlayer === 'p1' ? msg.finalScore.p2 : msg.finalScore.p1;
+				speak(`Final score: you ${you}, opponent ${opp}.`, true);
+			});
 			if (game.snapshot) onSnapshot(game.snapshot);
 			detachListeners = () => {
 				offGameStart?.();
 				offEvent?.();
 				offSnapshot?.();
+				offGameEnd?.();
 				detachListeners = () => {};
 			};
 		},

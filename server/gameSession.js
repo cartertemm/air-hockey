@@ -93,6 +93,7 @@ export class GameSession {
 			this.pendingEvents.push({ type: 'goal:scored', ...(data ?? {}), puckSpeed });
 		});
 		this.emitter.on('game:start', push('game:start'));
+		this.emitter.on('game:end', push('game:end'));
 		this.emitter.on('match:end', push('match:end'));
 		this.emitter.on('serve:assigned', (data) => {
 			this.pendingEvents.push({ type: 'serve:assigned', ...(data ?? {}) });

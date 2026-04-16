@@ -1033,7 +1033,7 @@ describe('session: handoff and countdown', () => {
 			}),
 		});
 		factory.fireMessage({ type: MSG.ROOM_COUNTDOWN, roomId: 'swift-otter-42' });
-		const region = root.querySelector('main[role="region"][aria-label="gameplay"]');
+		const region = root.querySelector('main[role="application"][aria-label="gameplay"]');
 		expect(region).toBeTruthy();
 	});
 
