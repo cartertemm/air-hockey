@@ -1,21 +1,24 @@
+import { sfx } from '../sfx.js';
 import { malletHitTier, wallBounceTier, goalTier } from './tiers.js';
 import { speak } from '../speech.js';
 import { TABLE_WIDTH } from '../physics.js';
 
-import tableLoopUrl from '../../sounds/table_loop.ogg?url';
-import puckLoopUrl from '../../sounds/puck_loop.ogg?url';
-import hitPuck1Url from '../../sounds/hit_puck1.ogg?url';
-import hitPuck2Url from '../../sounds/hit_puck2.ogg?url';
-import hitPuck3Url from '../../sounds/hit_puck3.ogg?url';
-import wallHardUrl from '../../sounds/puck_hit_side_hard.ogg?url';
-import wallSoftUrl from '../../sounds/puck_hit_side_soft.ogg?url';
-import goal1Url from '../../sounds/goal_1.ogg?url';
-import goal2Url from '../../sounds/goal_2.ogg?url';
-import goal3Url from '../../sounds/goal_3.ogg?url';
-import goal4Url from '../../sounds/goal_4.ogg?url';
-import goal5Url from '../../sounds/goal_5.ogg?url';
-import offTableUrl from '../../sounds/puck_off_table.ogg?url';
-import placePuckUrl from '../../sounds/place_puck.ogg?url';
+const defaultSounds = {
+	tableLoop:  sfx(() => import('../../sounds/table_loop.ogg?url')),
+	puckLoop:   sfx(() => import('../../sounds/puck_loop.ogg?url')),
+	hitPuck1:   sfx(() => import('../../sounds/hit_puck1.ogg?url')),
+	hitPuck2:   sfx(() => import('../../sounds/hit_puck2.ogg?url')),
+	hitPuck3:   sfx(() => import('../../sounds/hit_puck3.ogg?url')),
+	wallHard:   sfx(() => import('../../sounds/puck_hit_side_hard.ogg?url')),
+	wallSoft:   sfx(() => import('../../sounds/puck_hit_side_soft.ogg?url')),
+	goal1:      sfx(() => import('../../sounds/goal_1.ogg?url')),
+	goal2:      sfx(() => import('../../sounds/goal_2.ogg?url')),
+	goal3:      sfx(() => import('../../sounds/goal_3.ogg?url')),
+	goal4:      sfx(() => import('../../sounds/goal_4.ogg?url')),
+	goal5:      sfx(() => import('../../sounds/goal_5.ogg?url')),
+	offTable:   sfx(() => import('../../sounds/puck_off_table.ogg?url')),
+	placePuck:  sfx(() => import('../../sounds/place_puck.ogg?url')),
+};
 
 const VOL = {
 	tableLoop: 0.35,
@@ -34,53 +37,20 @@ const VOL = {
 	placePuck: 0.8,
 };
 
-const URLS = {
-	tableLoop: tableLoopUrl,
-	puckLoop: puckLoopUrl,
-	hitPuck1: hitPuck1Url,
-	hitPuck2: hitPuck2Url,
-	hitPuck3: hitPuck3Url,
-	wallHard: wallHardUrl,
-	wallSoft: wallSoftUrl,
-	goal1: goal1Url,
-	goal2: goal2Url,
-	goal3: goal3Url,
-	goal4: goal4Url,
-	goal5: goal5Url,
-	offTable: offTableUrl,
-	placePuck: placePuckUrl,
-};
-
 function panFor(localPlayer, tableX) {
 	const centered = (tableX - TABLE_WIDTH / 2) / (TABLE_WIDTH / 2);
 	return localPlayer === 'p1' ? centered : -centered;
 }
 
-let handlesPromise = null;
-async function loadHandles(sound) {
-	if (handlesPromise) return handlesPromise;
-	handlesPromise = (async () => {
-		await sound.initSound();
-		const handles = {};
-		for (const [key, url] of Object.entries(URLS)) {
-			handles[key] = await sound.loadSound(url);
-		}
-		return handles;
-	})();
-	return handlesPromise;
+export async function preloadGameAudio() {
+	await Promise.all(Object.values(defaultSounds).map(s => s.load()));
 }
 
-export async function preloadGameAudio({ sound }) {
-	await loadHandles(sound);
-}
-
-export async function createGameAudio({ sound }) {
-	await sound.initSound();
-	const handles = await loadHandles(sound);
-	let tableLoopHandle = null;
-	let puckLoopHandle = null;
+export function createGameAudio({ sounds = defaultSounds } = {}) {
 	let localPlayer = 'p1';
 	let active = false;
+	let tableLoopRunning = false;
+	let puckLoopRunning = false;
 	let detachListeners = () => {};
 
 	function shouldRunTableLoop(state) {
@@ -88,11 +58,10 @@ export async function createGameAudio({ sound }) {
 	}
 
 	function ensureTableLoop() {
-		if (tableLoopHandle?.inst?.isPlaying === false) {
-			tableLoopHandle = null;
+		if (!tableLoopRunning) {
+			tableLoopRunning = true;
+			sounds.tableLoop.play({ loop: 'infinite', volume: VOL.tableLoop });
 		}
-		if (tableLoopHandle) return;
-		tableLoopHandle = sound.playLoop(handles.tableLoop, { volume: VOL.tableLoop });
 	}
 
 	function onEvent(event) {
@@ -104,24 +73,24 @@ export async function createGameAudio({ sound }) {
 				break;
 			case 'puck:mallet_hit': {
 				const key = `hitPuck${malletHitTier(event.speed)}`;
-				sound.playSound(handles[key], { pan: panFor(localPlayer, event.x), volume: VOL[key] });
+				sounds[key].play({ pan: panFor(localPlayer, event.x), volume: VOL[key] });
 				break;
 			}
 			case 'puck:wall_bounce': {
 				const key = wallBounceTier(event.speed) === 'hard' ? 'wallHard' : 'wallSoft';
-				sound.playSound(handles[key], { pan: panFor(localPlayer, event.x), volume: VOL[key] });
+				sounds[key].play({ pan: panFor(localPlayer, event.x), volume: VOL[key] });
 				break;
 			}
 			case 'goal:scored': {
 				const key = `goal${goalTier(event.puckSpeed ?? 0)}`;
-				sound.playSound(handles[key], { volume: VOL[key] });
+				sounds[key].play({ volume: VOL[key] });
 				break;
 			}
 			case 'puck:off_table':
-				sound.playSound(handles.offTable, { volume: VOL.offTable });
+				sounds.offTable.play({ volume: VOL.offTable });
 				break;
 			case 'serve:assigned':
-				sound.playSound(handles.placePuck, { volume: VOL.placePuck });
+				sounds.placePuck.play({ volume: VOL.placePuck });
 				break;
 			case 'match:end':
 				if (event.winner) speak(`${event.winner} wins.`, true);
@@ -132,25 +101,24 @@ export async function createGameAudio({ sound }) {
 	function onSnapshot(snapshot) {
 		if (!active) return;
 		if (shouldRunTableLoop(snapshot.state)) ensureTableLoop();
-		if (puckLoopHandle?.inst?.isPlaying === false) {
-			puckLoopHandle = null;
-		}
-		if (snapshot.puck?.onTable && !puckLoopHandle) {
-			puckLoopHandle = sound.playLoop(handles.puckLoop, {
+		if (snapshot.puck?.onTable && !puckLoopRunning) {
+			puckLoopRunning = true;
+			sounds.puckLoop.play({
+				loop: 'infinite',
 				volume: VOL.puckLoop,
 				pan: panFor(localPlayer, snapshot.puck.x),
 			});
 		}
-		if (puckLoopHandle && snapshot.puck) {
-			sound.updateLoop(puckLoopHandle, { pan: panFor(localPlayer, snapshot.puck.x) });
+		if (puckLoopRunning && snapshot.puck) {
+			sounds.puckLoop.update({ pan: panFor(localPlayer, snapshot.puck.x) });
 		}
-		if (puckLoopHandle && !snapshot.puck?.onTable) {
-			sound.stopSound(puckLoopHandle);
-			puckLoopHandle = null;
+		if (puckLoopRunning && !snapshot.puck?.onTable) {
+			sounds.puckLoop.stop();
+			puckLoopRunning = false;
 		}
-		if (snapshot.state === 'MATCH_END' && tableLoopHandle) {
-			sound.stopSound(tableLoopHandle);
-			tableLoopHandle = null;
+		if (snapshot.state === 'MATCH_END' && tableLoopRunning) {
+			sounds.tableLoop.stop();
+			tableLoopRunning = false;
 		}
 	}
 
@@ -177,13 +145,13 @@ export async function createGameAudio({ sound }) {
 		dispose() {
 			active = false;
 			detachListeners();
-			if (tableLoopHandle) {
-				sound.stopSound(tableLoopHandle);
-				tableLoopHandle = null;
+			if (tableLoopRunning) {
+				sounds.tableLoop.stop();
+				tableLoopRunning = false;
 			}
-			if (puckLoopHandle) {
-				sound.stopSound(puckLoopHandle);
-				puckLoopHandle = null;
+			if (puckLoopRunning) {
+				sounds.puckLoop.stop();
+				puckLoopRunning = false;
 			}
 		},
 	};
