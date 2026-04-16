@@ -56,16 +56,44 @@ function panFor(localPlayer, tableX) {
 	return localPlayer === 'p1' ? centered : -centered;
 }
 
+let handlesPromise = null;
+async function loadHandles(sound) {
+	if (handlesPromise) return handlesPromise;
+	handlesPromise = (async () => {
+		await sound.initSound();
+		const handles = {};
+		for (const [key, url] of Object.entries(URLS)) {
+			handles[key] = await sound.loadSound(url);
+		}
+		return handles;
+	})();
+	return handlesPromise;
+}
+
+export async function preloadGameAudio({ sound }) {
+	await loadHandles(sound);
+}
+
 export async function createGameAudio({ sound }) {
 	await sound.initSound();
-	const handles = {};
-	for (const [key, url] of Object.entries(URLS)) {
-		handles[key] = await sound.loadSound(url);
-	}
+	const handles = await loadHandles(sound);
 	let tableLoopHandle = null;
 	let puckLoopHandle = null;
 	let localPlayer = 'p1';
 	let active = false;
+	let detachListeners = () => {};
+
+	function shouldRunTableLoop(state) {
+		return state === 'COUNTDOWN' || state === 'SERVE' || state === 'PLAYING' || state === 'PAUSED';
+	}
+
+	function ensureTableLoop() {
+		if (tableLoopHandle?.inst?.isPlaying === false) {
+			tableLoopHandle = null;
+		}
+		if (tableLoopHandle) return;
+		tableLoopHandle = sound.playLoop(handles.tableLoop, { volume: VOL.tableLoop });
+	}
 
 	function onEvent(event) {
 		if (!active) return;
@@ -103,8 +131,9 @@ export async function createGameAudio({ sound }) {
 
 	function onSnapshot(snapshot) {
 		if (!active) return;
-		if (snapshot.state === 'COUNTDOWN' && !tableLoopHandle) {
-			tableLoopHandle = sound.playLoop(handles.tableLoop, { volume: VOL.tableLoop });
+		if (shouldRunTableLoop(snapshot.state)) ensureTableLoop();
+		if (puckLoopHandle?.inst?.isPlaying === false) {
+			puckLoopHandle = null;
 		}
 		if (snapshot.puck?.onTable && !puckLoopHandle) {
 			puckLoopHandle = sound.playLoop(handles.puckLoop, {
@@ -127,17 +156,27 @@ export async function createGameAudio({ sound }) {
 
 	return {
 		attach(game) {
+			detachListeners();
 			active = true;
 			localPlayer = game.localPlayer ?? 'p1';
-			game.on('gameStart', (msg) => {
+			const offGameStart = game.on('gameStart', (msg) => {
 				if (!active) return;
 				localPlayer = msg.localPlayer;
+				ensureTableLoop();
 			});
-			game.on('event', onEvent);
-			game.on('snapshot', onSnapshot);
+			const offEvent = game.on('event', onEvent);
+			const offSnapshot = game.on('snapshot', onSnapshot);
+			if (game.snapshot) onSnapshot(game.snapshot);
+			detachListeners = () => {
+				offGameStart?.();
+				offEvent?.();
+				offSnapshot?.();
+				detachListeners = () => {};
+			};
 		},
 		dispose() {
 			active = false;
+			detachListeners();
 			if (tableLoopHandle) {
 				sound.stopSound(tableLoopHandle);
 				tableLoopHandle = null;

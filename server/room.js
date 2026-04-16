@@ -16,6 +16,7 @@ export class Room {
 		this.phase = 'waiting';
 		this.ready = new WeakSet();
 		this.confirmed = new WeakSet();
+		this.startRequested = false;
 		this.createdAt = Date.now();
 		host.room = this;
 		this.game = null;
@@ -35,6 +36,7 @@ export class Room {
 		this.members = this.members.filter(m => m !== player);
 		this.ready.delete(player);
 		this.confirmed.delete(player);
+		this.startRequested = false;
 		player.room = null;
 		if (this.game) {
 			this.game.stopRealTimeLoop();
@@ -59,13 +61,23 @@ export class Room {
 		const wasReady = this.phase === 'ready';
 		if (this.allReady()) this.phase = 'ready';
 		else if (wasReady)   this.phase = 'waiting';
+		if (this.phase !== 'ready') {
+			this.startRequested = false;
+			for (const member of this.members) this.confirmed.delete(member);
+		}
 		this.broadcastState();
 		broadcastLobbyUpdate();
 	}
 
 	setConfirmed(player) {
+		if (this.phase !== 'ready') {
+			this.broadcastState();
+			broadcastLobbyUpdate();
+			return;
+		}
 		this.confirmed.add(player);
-		if (this.allConfirmed()) {
+		if (player === this.members[0]) this.startRequested = true;
+		if (this.startRequested && this.allConfirmed()) {
 			this.phase = 'countdown';
 			this.broadcastCountdown();
 			this.startGame();
@@ -134,6 +146,7 @@ export class Room {
 			this.ready.delete(member);
 			this.confirmed.delete(member);
 		}
+		this.startRequested = false;
 		this.phase = 'waiting';
 		this.broadcastState();
 		broadcastLobbyUpdate();

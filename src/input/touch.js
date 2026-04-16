@@ -194,13 +194,7 @@ function onEnd(event) {
 export function initTouch(userOptions = {}) {
 	options = { ...DEFAULTS, ...userOptions };
 	const target = options.target ?? document.body;
-
-	fingers.clear();
-	resetGesture();
-	if (pendingTap) {
-		clearTimeout(pendingTap.timer);
-		pendingTap = null;
-	}
+	disposeTouch();
 
 	if (initialized && boundTarget === target) return;
 	if (initialized) {
@@ -216,6 +210,22 @@ export function initTouch(userOptions = {}) {
 	target.addEventListener('touchcancel', onEnd, { passive: false });
 	boundTarget = target;
 	initialized = true;
+}
+
+export function disposeTouch() {
+	fingers.clear();
+	resetGesture();
+	if (pendingTap) {
+		clearTimeout(pendingTap.timer);
+		pendingTap = null;
+	}
+	if (!initialized || !boundTarget) return;
+	boundTarget.removeEventListener('touchstart', onStart);
+	boundTarget.removeEventListener('touchmove', onMove);
+	boundTarget.removeEventListener('touchend', onEnd);
+	boundTarget.removeEventListener('touchcancel', onEnd);
+	boundTarget = null;
+	initialized = false;
 }
 
 export function fingerCount() {

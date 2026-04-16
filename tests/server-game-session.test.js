@@ -182,7 +182,7 @@ describe('GameSession snapshots', () => {
 });
 
 describe('Room ↔ GameSession wiring', () => {
-	test('second confirm starts a GameSession and phase becomes playing', () => {
+	test('host confirm plus guest confirm starts a GameSession and phase becomes playing', () => {
 		const p1 = new Player({ clientId: '1', sessionToken: 'x', name: 'a', socket: { send() {} } });
 		const p2 = new Player({ clientId: '2', sessionToken: 'y', name: 'b', socket: { send() {} } });
 		const room = new Room({ id: 'r1', host: p1, mode: 'singleMatch', pointLimit: 7 });
@@ -190,6 +190,7 @@ describe('Room ↔ GameSession wiring', () => {
 		room.setReady(p1, true);
 		room.setReady(p2, true);
 		room.setConfirmed(p1);
+		expect(room.phase).toBe('ready');
 		room.setConfirmed(p2);
 		expect(room.phase).toBe('playing');
 		expect(room.game).toBeDefined();

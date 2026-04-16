@@ -5,7 +5,7 @@ import {
 	TABLE_LENGTH,
 	MALLET_RADIUS,
 } from './physics.js';
-import { on as onTouch, fingerCount } from './input/touch.js';
+import { on as onTouch, off as offTouch, fingerCount } from './input/touch.js';
 import { InputHandler } from './input/inputHandler.js';
 
 const HALF = TABLE_LENGTH / 2;
@@ -38,12 +38,14 @@ export class Game {
 		this._keyboardLatch = false;
 		this._fingerId = null;
 		this._local = { x: TABLE_WIDTH / 2, y: 12, onTable: false };
+		this._touchHandlers = [];
 		this._wireClient();
 		this._wireInput();
 	}
 
 	on(event, handler) {
 		this.emitter.on(event, handler);
+		return () => this.emitter.off(event, handler);
 	}
 
 	_wireClient() {
@@ -61,7 +63,7 @@ export class Game {
 	}
 
 	_wireInput() {
-		onTouch('touchstart', (event) => {
+		const onStart = (event) => {
 			if (this._fingerId !== null) return;
 			const touch = event.changedTouches[0];
 			if (!touch) return;
@@ -70,8 +72,8 @@ export class Game {
 			this._applyTouch(touch.clientX, touch.clientY);
 			this._local.onTable = true;
 			this._sendCurrent();
-		});
-		onTouch('touchmove', (event) => {
+		};
+		const onMove = (event) => {
 			if (this._fingerId === null) return;
 			for (const touch of event.changedTouches) {
 				if (touch.identifier !== this._fingerId) continue;
@@ -79,8 +81,8 @@ export class Game {
 				this._sendCurrent();
 				break;
 			}
-		});
-		onTouch('touchend', (event) => {
+		};
+		const onEnd = (event) => {
 			if (this._fingerId === null) return;
 			for (const touch of event.changedTouches) {
 				if (touch.identifier !== this._fingerId) continue;
@@ -89,7 +91,11 @@ export class Game {
 				this._sendCurrent();
 				break;
 			}
-		});
+		};
+		onTouch('touchstart', onStart);
+		onTouch('touchmove', onMove);
+		onTouch('touchend', onEnd);
+		this._touchHandlers.push(['touchstart', onStart], ['touchmove', onMove], ['touchend', onEnd]);
 		const ih = this.input;
 		ih.bind('moveLeft', { hold: ['arrowleft'] });
 		ih.bind('moveRight', { hold: ['arrowright'] });
@@ -128,5 +134,12 @@ export class Game {
 
 	_sendCurrent() {
 		this.client.sendInput({ x: this._local.x, y: this._local.y, onTable: this._local.onTable });
+	}
+
+	dispose() {
+		for (const [eventName, handler] of this._touchHandlers) {
+			offTouch(eventName, handler);
+		}
+		this._touchHandlers = [];
 	}
 }

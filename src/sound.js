@@ -11,14 +11,17 @@ export async function initSound() {
 export async function loadSound(url) {
 	if (!cacophony) await initSound();
 	/* note: cacophony 0.18.3 createSound() returns Promise<Sound>, so we await here */
-	return await cacophony.createSound(url);
+	return await cacophony.createSound(url, undefined, 'stereo');
 }
 
 export function playSound(handle, options = {}) {
 	if (!handle) return;
-	const inst = handle.preplay?.()[0] ?? handle.play?.()[0];
+	const inst = handle.preplay?.()[0];
 	if (!inst) return;
-	if (options.loop) inst.loop?.('infinite');
+	if (options.loop) {
+		if ('sourceLoop' in inst) inst.sourceLoop = true;
+		else inst.loop?.('infinite');
+	}
 	if (typeof options.volume === 'number') inst.volume = options.volume;
 	if (typeof options.pan === 'number') inst.stereoPan = options.pan;
 	if (options.position) inst.position = options.position;
@@ -28,22 +31,36 @@ export function playSound(handle, options = {}) {
 
 export function playLoop(handle, { volume = 1, pan = 0 } = {}) {
 	if (!handle) return null;
-	const inst = handle.preplay?.()[0];
+	if (typeof handle.volume === 'number') handle.volume = volume;
+	if (typeof handle.stereoPan === 'number' || handle.stereoPan === null) handle.stereoPan = pan;
+	let inst = null;
+	try {
+		handle.loop?.('infinite');
+		inst = handle.preplay?.()[0] ?? null;
+	} catch {
+		inst = handle.preplay?.()[0] ?? null;
+		if (inst) {
+			if (typeof inst.loop === 'function') inst.loop('infinite');
+			else if ('sourceLoop' in inst) inst.sourceLoop = true;
+		}
+	}
 	if (!inst) return null;
-	inst.loop?.('infinite');
-	inst.volume = volume;
-	inst.stereoPan = pan;
+	if (typeof inst.volume === 'number') inst.volume = volume;
+	if (typeof inst.stereoPan === 'number' || inst.stereoPan === null) inst.stereoPan = pan;
 	inst.play?.();
-	return inst;
+	return { inst, handle };
 }
 
 export function updateLoop(inst, { volume, pan } = {}) {
-	if (!inst) return;
-	if (typeof volume === 'number') inst.volume = volume;
-	if (typeof pan === 'number') inst.stereoPan = pan;
+	const playback = inst?.inst ?? inst;
+	if (!playback) return;
+	if (typeof volume === 'number') playback.volume = volume;
+	if (typeof pan === 'number') playback.stereoPan = pan;
 }
 
 export function stopSound(inst) {
+	inst?.inst?.stop?.();
+	inst?.handle?.stop?.();
 	inst?.stop?.();
 }
 

@@ -178,22 +178,37 @@ const SCREENS = {
 	},
 
 	handoffIos(root, props) {
+		if (props.canConfirm) {
+			mount(root, [
+				el('h1', { text: 'Almost ready' }),
+				el('p', { text: 'VoiceOver interferes with gameplay gestures. Tap Continue, then turn off VoiceOver.' }),
+				el('button', { text: 'Continue', onClick: props.onContinue, autoFocus: true }),
+			]);
+			return;
+		}
 		mount(root, [
-			el('h1', { text: 'Almost ready' }),
-			el('p', { text: 'VoiceOver interferes with gameplay gestures. Tap Continue, then turn off VoiceOver.' }),
-			el('button', { text: 'Continue', onClick: props.onContinue, autoFocus: true }),
+			el('h1', { text: 'Waiting for player 1' }),
+			el('p', { role: 'status', text: 'Waiting for player 1 to start the game. Turn off VoiceOver before gameplay begins.' }),
 		]);
 	},
 
 	handoffDesktop(root, props) {
-		mount(root, [
-			el('h1', { text: 'Almost ready' }),
-			el('p', { role: 'status', text: 'Press Enter when you are ready to begin.' }),
-		]);
+		mount(root, props.canConfirm
+			? [
+				el('h1', { text: 'Almost ready' }),
+				el('p', { role: 'status', text: 'Activate Continue or press Enter when you are ready to begin.' }),
+				el('button', { text: 'Continue', onClick: props.onConfirm, autoFocus: true }),
+			]
+			: [
+				el('h1', { text: 'Waiting for player 1' }),
+				el('p', { role: 'status', text: 'Waiting for player 1 to start the game.' }),
+			]);
 		const onKey = (e) => { if (e.key === 'Enter') props.onConfirm(); };
-		window.addEventListener('keydown', onKey);
-		// Caller can call dispose to remove this listener.
-		root.__keyHandler = onKey;
+		if (props.canConfirm) {
+			window.addEventListener('keydown', onKey);
+			// Caller can call dispose to remove this listener.
+			root.__keyHandler = onKey;
+		}
 	},
 
 	testSpeakers(root, props) {
