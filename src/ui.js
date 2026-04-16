@@ -173,13 +173,6 @@ const SCREENS = {
 		]);
 	},
 
-	countdown(root, props) {
-		mount(root, [
-			el('h1', { text: 'Starting' }),
-			el('p', { 'aria-live': 'polite', text: `Starting in room ${props.roomId}…` }),
-		]);
-	},
-
 	gameplay(root) {
 		const region = el('main', { role: 'region', 'aria-label': 'gameplay' });
 		root.innerHTML = '';
