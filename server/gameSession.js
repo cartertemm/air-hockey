@@ -53,14 +53,14 @@ export class GameSession {
 
 	togglePause(role, byName) {
 		const prev = this.stateMachine.state;
-		if (prev === State.PLAYING) {
+		if (prev === State.PLAYING || prev === State.SERVE) {
 			this.stateMachine.pause();
 			if (this.stateMachine.state === State.PAUSED) {
 				this.pendingEvents.push({ type: 'game:paused', byPlayer: role, byName });
 			}
 		} else if (prev === State.PAUSED) {
 			this.stateMachine.resume();
-			if (this.stateMachine.state === State.PLAYING) {
+			if (this.stateMachine.state !== State.PAUSED) {
 				this.pendingEvents.push({ type: 'game:resumed', byPlayer: role, byName });
 			}
 		}

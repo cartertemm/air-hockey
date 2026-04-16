@@ -292,10 +292,25 @@ describe('pause and resume', () => {
 		expect(em.emitted('game:paused')).toHaveLength(1);
 	});
 
-	test('pause ignored outside PLAYING', () => {
+	test('pause ignored outside PLAYING and SERVE', () => {
 		const sm = makeSM();
 		sm.pause(); // in LOBBY
 		expect(sm.state).toBe(State.LOBBY);
+	});
+
+	test('pause transitions SERVE → PAUSED and resume restores SERVE', () => {
+		const em = mockEmitter();
+		const sm = makeSM({}, em);
+		sm.startCountdown('p1');
+		sm.beginServe();
+		expect(sm.state).toBe(State.SERVE);
+		em.events.length = 0;
+		sm.pause();
+		expect(sm.state).toBe(State.PAUSED);
+		expect(em.emitted('game:paused')).toHaveLength(1);
+		sm.resume();
+		expect(sm.state).toBe(State.SERVE);
+		expect(em.emitted('game:resumed')).toHaveLength(1);
 	});
 
 	test('resume transitions PAUSED → PLAYING', () => {

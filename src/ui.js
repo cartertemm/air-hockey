@@ -174,7 +174,15 @@ const SCREENS = {
 	},
 
 	gameplay(root) {
-		const region = el('main', { role: 'region', 'aria-label': 'gameplay' });
+		// role="application" + tabindex puts desktop screen readers into focus
+		// mode so single-letter shortcuts (P, space) pass through to the game
+		// instead of being captured as browse-mode quick-navigation keys.
+		const region = el('main', {
+			role: 'application',
+			'aria-label': 'gameplay',
+			tabindex: '-1',
+			autoFocus: true,
+		});
 		root.innerHTML = '';
 		root.appendChild(region);
 	},

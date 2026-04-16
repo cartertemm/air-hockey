@@ -210,6 +210,20 @@ describe('GameSession pause', () => {
 		expect(session.pendingEvents.some(e => e.type === 'game:paused')).toBe(false);
 	});
 
+	test('togglePause from SERVE pauses and resumes back to SERVE', () => {
+		const { session } = makeSession();
+		session._setState(State.SERVE);
+		session.togglePause('p1', 'Alice');
+		expect(session.stateMachine.state).toBe(State.PAUSED);
+		expect(session.pendingEvents.find(e => e.type === 'game:paused'))
+			.toEqual({ type: 'game:paused', byPlayer: 'p1', byName: 'Alice' });
+		session.drainPendingEvents();
+		session.togglePause('p2', 'Bob');
+		expect(session.stateMachine.state).toBe(State.SERVE);
+		expect(session.pendingEvents.find(e => e.type === 'game:resumed'))
+			.toEqual({ type: 'game:resumed', byPlayer: 'p2', byName: 'Bob' });
+	});
+
 	test('paused physics: puck does not move while PAUSED', () => {
 		const { session } = makeSession();
 		session._setState(State.PLAYING);

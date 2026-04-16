@@ -25,4 +25,14 @@ describe('Game input → socket integration', () => {
 		expect(inputs.length).toBeGreaterThan(0);
 		expect(inputs[0].onTable).toBe(true);
 	});
+
+	test('pressing p sends PAUSE_TOGGLE', () => {
+		initKeyboard();
+		const socket = makeFakeSocket();
+		const game = new Game({ socket });
+		game.client.handleMessage({ type: MSG.GAME_START, localPlayer: 'p1', pointLimit: 7 });
+		dispatchKey('keydown', 'p');
+		const pauses = socket.sent.filter(m => m.type === MSG.PAUSE_TOGGLE);
+		expect(pauses.length).toBe(1);
+	});
 });

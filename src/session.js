@@ -323,7 +323,9 @@ export function startSession({
 		(async () => {
 			const { Game, createGameAudio } = await prepareGameplay();
 			if (disposed) return;
-			initTouch({ target: root });
+			// document.body so touches across the full viewport are captured —
+			// the gameplay region inside `root` is empty and collapses to 0px.
+			initTouch({ target: document.body });
 			game = new Game({ socket: client });
 			frameHandle = requestAnimationFrame(step);
 			audio = createGameAudio();

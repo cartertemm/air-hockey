@@ -118,15 +118,15 @@ export class GameStateMachine {
 	}
 
 	pause() {
-		if (this.state !== State.PLAYING) return;
-		this._stateBeforePause = State.PLAYING;
+		if (this.state !== State.PLAYING && this.state !== State.SERVE) return;
+		this._stateBeforePause = this.state;
 		this._transition(State.PAUSED);
 		this._emit('game:paused');
 	}
 
 	resume() {
 		if (this.state !== State.PAUSED) return;
-		this._transition(State.PLAYING);
+		this._transition(this._stateBeforePause ?? State.PLAYING);
 		this._emit('game:resumed');
 	}
 
