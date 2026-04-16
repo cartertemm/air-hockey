@@ -760,8 +760,7 @@ describe('session: handoff and countdown', () => {
 			isIOS: () => false,
 			loadGameplay: async () => ({
 				Game: class {},
-				sound: {},
-				createGameAudio: async () => ({ attach() {}, dispose() {} }),
+				createGameAudio: () => ({ attach() {}, dispose() {} }),
 				preloadGameAudio: async () => {},
 			}),
 		});
@@ -824,8 +823,7 @@ describe('session: handoff and countdown', () => {
 		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(false);
 		preload.resolve({
 			Game: class {},
-			sound: {},
-			createGameAudio: async () => ({ attach() {}, dispose() {} }),
+			createGameAudio: () => ({ attach() {}, dispose() {} }),
 			preloadGameAudio: async () => {},
 		});
 		await flushAsyncWork();
@@ -897,8 +895,7 @@ describe('session: handoff and countdown', () => {
 		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(false);
 		preload.resolve({
 			Game: class {},
-			sound: {},
-			createGameAudio: async () => ({ attach() {}, dispose() {} }),
+			createGameAudio: () => ({ attach() {}, dispose() {} }),
 			preloadGameAudio: async () => {},
 		});
 		await flushAsyncWork();
@@ -915,8 +912,7 @@ describe('session: handoff and countdown', () => {
 			isIOS: () => false,
 			loadGameplay: async () => ({
 				Game: class {},
-				sound: {},
-				createGameAudio: async () => ({ attach() {}, dispose() {} }),
+				createGameAudio: () => ({ attach() {}, dispose() {} }),
 				preloadGameAudio: async () => {},
 			}),
 		});
@@ -981,15 +977,14 @@ describe('session: handoff and countdown', () => {
 			root,
 			createClient: factory,
 			isIOS: () => false,
-			loadGameplay: async () => ({
-				Game: FakeGame,
-				sound: {},
-				preloadGameAudio: async () => {},
-				createGameAudio: async () => {
-					await audioReady.promise;
-					return { attach() {}, dispose() {} };
-				},
-			}),
+			loadGameplay: async () => {
+				await audioReady.promise;
+				return {
+					Game: FakeGame,
+					preloadGameAudio: async () => {},
+					createGameAudio: () => ({ attach() {}, dispose() {} }),
+				};
+			},
 		});
 		root.querySelector('button').click();
 		await Promise.resolve();
@@ -1067,8 +1062,7 @@ describe('session: handoff and countdown', () => {
 			isIOS: () => true,
 			loadGameplay: async () => ({
 				Game: class {},
-				sound: {},
-				createGameAudio: async () => ({ attach() {}, dispose() {} }),
+				createGameAudio: () => ({ attach() {}, dispose() {} }),
 				preloadGameAudio: async () => {},
 			}),
 		});
