@@ -348,6 +348,44 @@ describe('game audio one-shots', () => {
 	});
 });
 
+describe('game audio pause announcements', () => {
+	async function setup(localPlayer) {
+		const { initSpeech } = await import('../src/speech.js');
+		document.body.innerHTML = '';
+		initSpeech();
+		const sounds = makeSounds();
+		const audio = createGameAudio({ sounds });
+		const game = createFakeGame();
+		audio.attach(game);
+		game.emit('gameStart', { localPlayer, pointLimit: 7 });
+		return { game };
+	}
+
+	test('local player pausing speaks "Game paused."', async () => {
+		const { game } = await setup('p1');
+		game.emit('event', { type: 'game:paused', byPlayer: 'p1', byName: 'Alice' });
+		expect(document.getElementById('sr-assertive').textContent).toBe('Game paused.');
+	});
+
+	test('remote player pausing speaks "Game paused by {name}."', async () => {
+		const { game } = await setup('p1');
+		game.emit('event', { type: 'game:paused', byPlayer: 'p2', byName: 'Bob' });
+		expect(document.getElementById('sr-assertive').textContent).toBe('Game paused by Bob.');
+	});
+
+	test('local player resuming speaks "Game resumed."', async () => {
+		const { game } = await setup('p2');
+		game.emit('event', { type: 'game:resumed', byPlayer: 'p2', byName: 'Bob' });
+		expect(document.getElementById('sr-assertive').textContent).toBe('Game resumed.');
+	});
+
+	test('remote player resuming speaks "Game resumed by {name}."', async () => {
+		const { game } = await setup('p2');
+		game.emit('event', { type: 'game:resumed', byPlayer: 'p1', byName: 'Alice' });
+		expect(document.getElementById('sr-assertive').textContent).toBe('Game resumed by Alice.');
+	});
+});
+
 describe('game audio dispose', () => {
 	test('dispose stops both loops', () => {
 		const sounds = makeSounds();

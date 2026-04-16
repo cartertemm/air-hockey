@@ -7,6 +7,8 @@ import {
 } from './physics.js';
 import { on as onTouch, off as offTouch, fingerCount } from './input/touch.js';
 import { InputHandler } from './input/inputHandler.js';
+import { pauseToggleMsg } from '../network/protocol.js';
+import { speak } from './speech.js';
 
 const HALF = TABLE_LENGTH / 2;
 const MALLET_SPEED_BASE = 24;
@@ -31,6 +33,7 @@ export function screenToTable(screenX, screenY, player, screenW, screenH) {
 export class Game {
 	constructor({ socket, input = null } = {}) {
 		this.emitter = new EventEmitter();
+		this.socket = socket;
 		this.client = createGameClient({ socket });
 		this.input = input ?? new InputHandler();
 		this.localPlayer = null;
@@ -103,6 +106,33 @@ export class Game {
 		ih.bind('moveDown', { hold: ['arrowdown'] });
 		ih.bind('moveFast', { hold: ['control'] });
 		ih.bind('latchMallet', { press: ['arrowleft', 'arrowright', 'arrowup', 'arrowdown'] });
+		ih.bind('pause', {
+			press: ['p'],
+			tap: [{ fingerCount: 2, tapCount: 1 }],
+		});
+		ih.bind('readScore', {
+			press: [' '],
+			tap: [{ fingerCount: 3, tapCount: 1 }],
+		});
+		ih.on('pause', () => this._sendPauseToggle());
+		ih.on('readScore', () => this._readScoreAloud());
+	}
+
+	_sendPauseToggle() {
+		this.socket?.send(pauseToggleMsg());
+	}
+
+	_readScoreAloud() {
+		const scores = this.snapshot?.scores;
+		const p1 = scores?.p1?.points ?? 0;
+		const p2 = scores?.p2?.points ?? 0;
+		if (!this.localPlayer) {
+			speak(`Score: ${p1} to ${p2}.`, true);
+			return;
+		}
+		const you = this.localPlayer === 'p1' ? p1 : p2;
+		const opp = this.localPlayer === 'p1' ? p2 : p1;
+		speak(`You ${you}, opponent ${opp}.`, true);
 	}
 
 	_applyTouch(screenX, screenY) {

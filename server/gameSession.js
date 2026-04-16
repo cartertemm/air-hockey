@@ -51,6 +51,21 @@ export class GameSession {
 		this.inputBuffer[player] = { x, y, onTable };
 	}
 
+	togglePause(role, byName) {
+		const prev = this.stateMachine.state;
+		if (prev === State.PLAYING) {
+			this.stateMachine.pause();
+			if (this.stateMachine.state === State.PAUSED) {
+				this.pendingEvents.push({ type: 'game:paused', byPlayer: role, byName });
+			}
+		} else if (prev === State.PAUSED) {
+			this.stateMachine.resume();
+			if (this.stateMachine.state === State.PLAYING) {
+				this.pendingEvents.push({ type: 'game:resumed', byPlayer: role, byName });
+			}
+		}
+	}
+
 	_wireEvents() {
 		const push = (type) => (data) => this.pendingEvents.push({ type, ...(data ?? {}) });
 		this.emitter.on('puck:mallet_hit', push('puck:mallet_hit'));

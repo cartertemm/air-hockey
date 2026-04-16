@@ -10,6 +10,7 @@ export const MSG = Object.freeze({
 	ROOM_UNREADY:      'room:unready',
 	ROOM_CONFIRM:      'room:confirm',
 	INPUT:             'input',
+	PAUSE_TOGGLE:      'pause:toggle',
 	SCORE_READOUT:     'score:readout',
 	// Server -> Client
 	WELCOME:           'welcome',
@@ -107,6 +108,10 @@ export function inputMsg({ tick, x, y, onTable }) {
 
 export function scoreReadoutMsg() {
 	return { type: MSG.SCORE_READOUT };
+}
+
+export function pauseToggleMsg() {
+	return { type: MSG.PAUSE_TOGGLE };
 }
 
 export function gameStart({ localPlayer, pointLimit }) {

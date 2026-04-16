@@ -90,6 +90,12 @@ export function handleConnection(rawSocket) {
 					{ x: msg.x, y: msg.y, onTable: !!msg.onTable },
 				);
 				break;
+			case MSG.PAUSE_TOGGLE:
+				if (player.room?.game) {
+					const role = player.room.members[0] === player ? 'p1' : 'p2';
+					player.room.game.togglePause(role, player.name);
+				}
+				break;
 			case MSG.SCORE_READOUT:
 				break;
 			case MSG.LOBBY_SUBSCRIBE:

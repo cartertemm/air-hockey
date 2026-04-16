@@ -8,6 +8,7 @@ import {
 	gameSnapshot,
 	gameEnd,
 	scoreReadoutMsg,
+	pauseToggleMsg,
 	encode,
 	decode,
 } from '../network/protocol.js';
@@ -52,6 +53,12 @@ describe('gameplay protocol', () => {
 	test('scoreReadoutMsg round-trip', () => {
 		const m = scoreReadoutMsg();
 		expect(m.type).toBe(MSG.SCORE_READOUT);
+		expect(decode(encode(m))).toEqual(m);
+	});
+
+	test('pauseToggleMsg round-trip', () => {
+		const m = pauseToggleMsg();
+		expect(m.type).toBe(MSG.PAUSE_TOGGLE);
 		expect(decode(encode(m))).toEqual(m);
 	});
 

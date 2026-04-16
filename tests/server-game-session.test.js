@@ -181,6 +181,46 @@ describe('GameSession snapshots', () => {
 	});
 });
 
+describe('GameSession pause', () => {
+	test('togglePause from PLAYING enters PAUSED and emits game:paused with byPlayer+byName', () => {
+		const { session } = makeSession();
+		session._setState(State.PLAYING);
+		session.togglePause('p1', 'Alice');
+		expect(session.stateMachine.state).toBe(State.PAUSED);
+		const event = session.pendingEvents.find(e => e.type === 'game:paused');
+		expect(event).toEqual({ type: 'game:paused', byPlayer: 'p1', byName: 'Alice' });
+	});
+
+	test('togglePause from PAUSED returns to PLAYING and emits game:resumed with byPlayer+byName', () => {
+		const { session } = makeSession();
+		session._setState(State.PLAYING);
+		session.togglePause('p1', 'Alice');
+		session.drainPendingEvents();
+		session.togglePause('p2', 'Bob');
+		expect(session.stateMachine.state).toBe(State.PLAYING);
+		const event = session.pendingEvents.find(e => e.type === 'game:resumed');
+		expect(event).toEqual({ type: 'game:resumed', byPlayer: 'p2', byName: 'Bob' });
+	});
+
+	test('togglePause from COUNTDOWN is ignored', () => {
+		const { session } = makeSession();
+		session.start({ now: 0, firstServer: 'p1' });
+		session.togglePause('p1', 'Alice');
+		expect(session.stateMachine.state).toBe(State.COUNTDOWN);
+		expect(session.pendingEvents.some(e => e.type === 'game:paused')).toBe(false);
+	});
+
+	test('paused physics: puck does not move while PAUSED', () => {
+		const { session } = makeSession();
+		session._setState(State.PLAYING);
+		session.physicsState.puck.vx = 60;
+		session.togglePause('p1', 'Alice');
+		const xBefore = session.physicsState.puck.x;
+		session.tick(1 / 120);
+		expect(session.physicsState.puck.x).toBe(xBefore);
+	});
+});
+
 describe('Room ↔ GameSession wiring', () => {
 	test('host confirm plus guest confirm starts a GameSession and phase becomes playing', () => {
 		const p1 = new Player({ clientId: '1', sessionToken: 'x', name: 'a', socket: { send() {} } });

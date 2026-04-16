@@ -124,6 +124,14 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 			case 'match:end':
 				if (event.winner) speak(`${event.winner} wins.`, true);
 				break;
+			case 'game:paused':
+				if (event.byPlayer === localPlayer) speak('Game paused.', true);
+				else speak(`Game paused by ${event.byName}.`, true);
+				break;
+			case 'game:resumed':
+				if (event.byPlayer === localPlayer) speak('Game resumed.', true);
+				else speak(`Game resumed by ${event.byName}.`, true);
+				break;
 		}
 	}
 
