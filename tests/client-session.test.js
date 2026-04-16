@@ -1169,6 +1169,45 @@ describe('session: handoff and countdown', () => {
 		await flushAsyncWork();
 		expect(factory.client.sent.some(m => m.type === MSG.ROOM_CONFIRM)).toBe(true);
 	});
+
+	test('iOS handoff VoiceOver notice shows even when running in the browser (prompt dismissed)', async () => {
+		settings.set('pwaPromptDismissed', true);
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const factory = makeFakeClient();
+		startSession({
+			root,
+			createClient: factory,
+			isIOS: () => true,
+			isIOSStandalone: () => false,
+			loadGameplay: async () => ({
+				Game: class {},
+				createGameAudio: () => ({ attach() {}, dispose() {} }),
+				preloadGameAudio: async () => {},
+			}),
+		});
+		root.querySelector('button').click();
+		await Promise.resolve();
+		factory.fireMessage({
+			type: MSG.WELCOME,
+			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
+		});
+		clickText(root, 'Create game');
+		clickText(root, 'Create');
+		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
+		factory.fireMessage({
+			type: MSG.ROOM_STATE,
+			room: makeRoom({
+				phase: 'ready',
+				members: [
+					{ clientId: 'c1', name: 'A', ready: true, confirmed: false, connected: true },
+					{ clientId: 'c2', name: 'B', ready: true, confirmed: false, connected: true },
+				],
+			}),
+		});
+		expect(root.querySelector('h1').textContent).toBe('Almost ready');
+		expect(root.querySelector('p').textContent).toMatch(/VoiceOver/);
+	});
 });
 
 describe('session: disconnect', () => {
