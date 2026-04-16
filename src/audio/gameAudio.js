@@ -6,6 +6,7 @@ import { TABLE_WIDTH } from '../physics.js';
 const defaultSounds = {
 	tableLoop:  sfx(() => import('../../sounds/table_loop.ogg?url')),
 	puckLoop:   sfx(() => import('../../sounds/puck_loop.ogg?url')),
+	malletLoop: sfx(() => import('../../sounds/mallet_loop.ogg?url')),
 	hitPuck1:   sfx(() => import('../../sounds/hit_puck1.ogg?url')),
 	hitPuck2:   sfx(() => import('../../sounds/hit_puck2.ogg?url')),
 	hitPuck3:   sfx(() => import('../../sounds/hit_puck3.ogg?url')),
@@ -23,6 +24,7 @@ const defaultSounds = {
 const VOL = {
 	tableLoop: 0.35,
 	puckLoop: 0.6,
+	malletLoop: 0.5,
 	hitPuck1: 1.0,
 	hitPuck2: 0.85,
 	hitPuck3: 0.7,
@@ -111,6 +113,20 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 		} else if (sounds.puckLoop.isLooping()) {
 			sounds.puckLoop.stop();
 		}
+		const localMallet = snapshot.mallets?.[localPlayer];
+		if (shouldRunTableLoop(snapshot.state) && localMallet?.onTable) {
+			if (!sounds.malletLoop.isLooping()) {
+				sounds.malletLoop.play({
+					loop: 'infinite',
+					volume: VOL.malletLoop,
+					pan: panFor(localPlayer, localMallet.x),
+				});
+			} else {
+				sounds.malletLoop.update({ pan: panFor(localPlayer, localMallet.x) });
+			}
+		} else if (sounds.malletLoop.isLooping()) {
+			sounds.malletLoop.stop();
+		}
 		if (snapshot.state === 'MATCH_END' && sounds.tableLoop.isLooping()) {
 			sounds.tableLoop.stop();
 		}
@@ -141,6 +157,7 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 			detachListeners();
 			sounds.tableLoop.stop();
 			sounds.puckLoop.stop();
+			sounds.malletLoop.stop();
 		},
 	};
 }

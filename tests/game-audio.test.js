@@ -38,6 +38,7 @@ function makeSounds() {
 	return {
 		tableLoop: fakeSfx(),
 		puckLoop: fakeSfx(),
+		malletLoop: fakeSfx(),
 		hitPuck1: fakeSfx(),
 		hitPuck2: fakeSfx(),
 		hitPuck3: fakeSfx(),
@@ -125,6 +126,49 @@ describe('game audio loops', () => {
 		expect(sounds.tableLoop.play).toHaveBeenCalledTimes(1);
 	});
 
+	test('mallet loop tracks local mallet x and stops when off-table or outside gameplay', () => {
+		const sounds = makeSounds();
+		const audio = createGameAudio({ sounds });
+		const game = createFakeGame();
+		audio.attach(game);
+		game.emit('gameStart', { localPlayer: 'p1', pointLimit: 7 });
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24 },
+			mallets: { p1: { x: 10, onTable: true }, p2: { x: 30, onTable: true } },
+		});
+		expect(sounds.malletLoop.play).toHaveBeenCalledTimes(1);
+		expect(sounds.malletLoop.play).toHaveBeenCalledWith(expect.objectContaining({
+			loop: 'infinite',
+			volume: 0.5,
+		}));
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24 },
+			mallets: { p1: { x: 20, onTable: true }, p2: { x: 30, onTable: true } },
+		});
+		expect(sounds.malletLoop.play).toHaveBeenCalledTimes(1);
+		expect(sounds.malletLoop.update).toHaveBeenCalledTimes(1);
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24 },
+			mallets: { p1: { x: 20, onTable: false }, p2: { x: 30, onTable: true } },
+		});
+		expect(sounds.malletLoop.stop).toHaveBeenCalledTimes(1);
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24 },
+			mallets: { p1: { x: 20, onTable: true }, p2: { x: 30, onTable: true } },
+		});
+		expect(sounds.malletLoop.play).toHaveBeenCalledTimes(2);
+		game.emit('snapshot', {
+			state: 'MATCH_END',
+			puck: { onTable: false, x: 24 },
+			mallets: { p1: { x: 20, onTable: true }, p2: { x: 30, onTable: true } },
+		});
+		expect(sounds.malletLoop.stop).toHaveBeenCalledTimes(2);
+	});
+
 	test('externally killed loop can be restarted', () => {
 		const sounds = makeSounds();
 		// Override tableLoop isLooping to simulate external kill
@@ -207,5 +251,6 @@ describe('game audio dispose', () => {
 		audio.dispose();
 		expect(sounds.tableLoop.stop).toHaveBeenCalledTimes(1);
 		expect(sounds.puckLoop.stop).toHaveBeenCalledTimes(1);
+		expect(sounds.malletLoop.stop).toHaveBeenCalledTimes(1);
 	});
 });
