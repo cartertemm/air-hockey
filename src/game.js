@@ -151,9 +151,16 @@ export class Game {
 		}
 		if (!this._keyboardLatch) return;
 		const ih = this.input;
-		const dx = (ih.wasTriggered('moveRight') ? 1 : 0) - (ih.wasTriggered('moveLeft') ? 1 : 0);
-		const dy = (ih.wasTriggered('moveUp') ? 1 : 0) - (ih.wasTriggered('moveDown') ? 1 : 0);
+		let dx = (ih.wasTriggered('moveRight') ? 1 : 0) - (ih.wasTriggered('moveLeft') ? 1 : 0);
+		let dy = (ih.wasTriggered('moveUp') ? 1 : 0) - (ih.wasTriggered('moveDown') ? 1 : 0);
 		if (dx === 0 && dy === 0) return;
+		// Player 2 sits at the north end facing south — their screen is mirrored,
+		// so right-arrow should move the mallet to the player's right (world -x)
+		// and up-arrow should move it forward (world -y).
+		if (this.localPlayer === 'p2') {
+			dx = -dx;
+			dy = -dy;
+		}
 		const speed = ih.wasTriggered('moveFast') ? MALLET_SPEED_FAST : MALLET_SPEED_BASE;
 		const len = Math.hypot(dx, dy);
 		const bounds = Y_BOUNDS[this.localPlayer];
