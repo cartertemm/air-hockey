@@ -47,16 +47,14 @@ let gameBundlePromise = null;
 async function loadGameBundle() {
 	if (gameBundlePromise) return gameBundlePromise;
 	gameBundlePromise = (async () => {
-		const [gameMod, audioMod, sound] = await Promise.all([
+		const [gameMod, audioMod] = await Promise.all([
 			import('./game.js'),
 			import('./audio/gameAudio.js'),
-			import('./sound.js'),
 		]);
 		return {
 			Game: gameMod.Game,
 			createGameAudio: audioMod.createGameAudio,
 			preloadGameAudio: audioMod.preloadGameAudio,
-			sound,
 		};
 	})();
 	return gameBundlePromise;
@@ -83,7 +81,7 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 		gameplayPreparation = (async () => {
 			initSpeech();
 			const bundle = await loadGameplay();
-			await bundle.preloadGameAudio({ sound: bundle.sound });
+			await bundle.preloadGameAudio();
 			return bundle;
 		})();
 		return gameplayPreparation;
@@ -305,12 +303,12 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 			frameHandle = requestAnimationFrame(step);
 		}
 		(async () => {
-			const { Game, createGameAudio, sound } = await prepareGameplay();
+			const { Game, createGameAudio } = await prepareGameplay();
 			if (disposed) return;
 			initTouch({ target: root });
 			game = new Game({ socket: client });
 			frameHandle = requestAnimationFrame(step);
-			audio = await createGameAudio({ sound });
+			audio = createGameAudio();
 			if (disposed) {
 				audio.dispose();
 				return;
