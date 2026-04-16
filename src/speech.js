@@ -35,6 +35,19 @@ export function initSpeech() {
 	assertiveRegion = createRegion('sr-assertive', 'assertive', 'alert');
 }
 
+// iOS Safari/WebKit requires the first speechSynthesis.speak() to happen
+// inside a user gesture; otherwise subsequent network-triggered speak() calls
+// (e.g. the countdown) are silently dropped. Call this synchronously from a
+// click/tap handler before any await, to unlock TTS for the rest of the
+// session. Safe to call on every platform — a volume-0 empty utterance is
+// a no-op everywhere else.
+export function primeTts() {
+	if (typeof speechSynthesis === 'undefined') return;
+	const utterance = new SpeechSynthesisUtterance(' ');
+	utterance.volume = 0;
+	speechSynthesis.speak(utterance);
+}
+
 export function speak(text, interrupt = false) {
 	const mode = getSpeechMode();
 	const useAria = mode === SPEECH_MODE_ARIA || mode === SPEECH_MODE_BOTH;

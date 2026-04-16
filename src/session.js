@@ -8,6 +8,7 @@ import { initTouch, disposeTouch } from './input/touch.js';
 import {
 	initSpeech,
 	speak,
+	primeTts,
 	getSpeechMode,
 	setSpeechMode,
 	getVoices,
@@ -235,6 +236,7 @@ export function startSession({
 				room,
 				localReady,
 				onToggleReady: () => {
+					primeTts();
 					client?.send(localReady ? roomUnready() : roomReady());
 				},
 				onLeave: leave,
@@ -260,6 +262,7 @@ export function startSession({
 			go(screenOnlineMenu());
 		};
 		const confirm = async () => {
+			primeTts();
 			await prepareGameplay();
 			client?.send(roomConfirm());
 		};
