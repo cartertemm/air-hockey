@@ -92,7 +92,7 @@ export class GameSession {
 	_placePuck(servingPlayer) {
 		const puck = this.physicsState.puck;
 		puck.x = TABLE_WIDTH / 2;
-		puck.y = servingPlayer === 'p1' ? 12 : TABLE_LENGTH - 12;
+		puck.y = servingPlayer === 'p1' ? TABLE_LENGTH / 4 : (3 * TABLE_LENGTH) / 4;
 		puck.vx = randomDrift();
 		puck.vy = randomDrift();
 		puck.omega = 0;
