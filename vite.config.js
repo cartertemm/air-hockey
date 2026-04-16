@@ -16,6 +16,8 @@ function httpsConfig() {
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), '');
 	const serverPort = env.SERVER_PORT ?? '8443';
+	// 0.0.0.0 is a bind address, not a connect target — fall back to localhost.
+	const proxyHost = env.SERVER_HOST && env.SERVER_HOST !== '0.0.0.0' ? env.SERVER_HOST : 'localhost';
 	return {
 		resolve: {
 			alias: {
@@ -27,7 +29,7 @@ export default defineConfig(({ mode }) => {
 			https: httpsConfig(),
 			proxy: {
 				'/ws': {
-					target: `wss://localhost:${serverPort}`,
+					target: `wss://${proxyHost}:${serverPort}`,
 					ws: true,
 					changeOrigin: true,
 					secure: false,
