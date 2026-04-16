@@ -39,6 +39,7 @@ function makeSounds() {
 		tableLoop: fakeSfx(),
 		puckLoop: fakeSfx(),
 		malletLoop: fakeSfx(),
+		opponentMalletLoop: fakeSfx(),
 		hitPuck1: fakeSfx(),
 		hitPuck2: fakeSfx(),
 		hitPuck3: fakeSfx(),
@@ -169,6 +170,97 @@ describe('game audio loops', () => {
 		expect(sounds.malletLoop.stop).toHaveBeenCalledTimes(2);
 	});
 
+	test('opponent mallet loop tracks the non-local mallet and stops when off-table', () => {
+		const sounds = makeSounds();
+		const audio = createGameAudio({ sounds });
+		const game = createFakeGame();
+		audio.attach(game);
+		game.emit('gameStart', { localPlayer: 'p1', pointLimit: 7 });
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24 },
+			mallets: { p1: { x: 10, onTable: true }, p2: { x: 30, onTable: true } },
+		});
+		expect(sounds.opponentMalletLoop.play).toHaveBeenCalledTimes(1);
+		expect(sounds.opponentMalletLoop.play).toHaveBeenCalledWith(expect.objectContaining({
+			loop: 'infinite',
+		}));
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24 },
+			mallets: { p1: { x: 10, onTable: true }, p2: { x: 40, onTable: true } },
+		});
+		expect(sounds.opponentMalletLoop.play).toHaveBeenCalledTimes(1);
+		expect(sounds.opponentMalletLoop.update).toHaveBeenCalledTimes(1);
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24 },
+			mallets: { p1: { x: 10, onTable: true }, p2: { x: 40, onTable: false } },
+		});
+		expect(sounds.opponentMalletLoop.stop).toHaveBeenCalledTimes(1);
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24 },
+			mallets: { p1: { x: 10, onTable: true }, p2: { x: 40, onTable: true } },
+		});
+		expect(sounds.opponentMalletLoop.play).toHaveBeenCalledTimes(2);
+		game.emit('snapshot', {
+			state: 'MATCH_END',
+			puck: { onTable: false, x: 24 },
+			mallets: { p1: { x: 10, onTable: true }, p2: { x: 40, onTable: true } },
+		});
+		expect(sounds.opponentMalletLoop.stop).toHaveBeenCalledTimes(2);
+	});
+
+	test('puck loop volume attenuates with y distance from listener', () => {
+		const sounds = makeSounds();
+		const audio = createGameAudio({ sounds });
+		const game = createFakeGame();
+		audio.attach(game);
+		game.emit('gameStart', { localPlayer: 'p1', pointLimit: 7 });
+		// Puck right at p1's goal (y=0): full volume = 0.6 * 1.0 = 0.6
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24, y: 0 },
+		});
+		expect(sounds.puckLoop.play).toHaveBeenCalledWith(expect.objectContaining({
+			volume: 0.6,
+		}));
+		// Puck at far end (y=96): factor = 1 - 0.7 = 0.3, volume = 0.6 * 0.3 = 0.18
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24, y: 96 },
+		});
+		expect(sounds.puckLoop.update).toHaveBeenCalledWith(expect.objectContaining({
+			volume: expect.closeTo(0.18, 5),
+		}));
+		// Puck at midcourt (y=48): factor = 1 - 0.35 = 0.65, volume = 0.6 * 0.65 = 0.39
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24, y: 48 },
+		});
+		expect(sounds.puckLoop.update).toHaveBeenLastCalledWith(expect.objectContaining({
+			volume: expect.closeTo(0.39, 5),
+		}));
+	});
+
+	test('opponent mallet loop volume attenuates by y distance from listener', () => {
+		const sounds = makeSounds();
+		const audio = createGameAudio({ sounds });
+		const game = createFakeGame();
+		audio.attach(game);
+		game.emit('gameStart', { localPlayer: 'p1', pointLimit: 7 });
+		// Opponent at far goal (y=96): factor = 0.3, volume = 0.5 * 0.3 = 0.15
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24 },
+			mallets: { p1: { x: 10, y: 12, onTable: true }, p2: { x: 30, y: 96, onTable: true } },
+		});
+		expect(sounds.opponentMalletLoop.play).toHaveBeenCalledWith(expect.objectContaining({
+			volume: expect.closeTo(0.15, 5),
+		}));
+	});
+
 	test('externally killed loop can be restarted', () => {
 		const sounds = makeSounds();
 		// Override tableLoop isLooping to simulate external kill
@@ -252,5 +344,6 @@ describe('game audio dispose', () => {
 		expect(sounds.tableLoop.stop).toHaveBeenCalledTimes(1);
 		expect(sounds.puckLoop.stop).toHaveBeenCalledTimes(1);
 		expect(sounds.malletLoop.stop).toHaveBeenCalledTimes(1);
+		expect(sounds.opponentMalletLoop.stop).toHaveBeenCalledTimes(1);
 	});
 });
