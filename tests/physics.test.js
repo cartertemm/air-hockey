@@ -242,6 +242,87 @@ describe('mallet collision', () => {
 	});
 });
 
+// ─── Corner-pin escape ────────────────────────────────────────────────────────
+// When the puck is wedged into a corner by two walls, the raw collision normal
+// points the puck deeper into the walls — the walls reflect it, but the mallet
+// is still in the way. Without tangential redirection the puck can oscillate
+// in place or, against a stationary mallet, stop dead. These tests pin down
+// the redirected-escape behavior.
+
+describe('corner-pin escape', () => {
+	test('SW-corner puck escapes east when mallet approaches from NE', () => {
+		const state = makeState(
+			{ x: PUCK_RADIUS, y: PUCK_RADIUS, vx: 0, vy: 0 },
+			{ p1: { ...createMallet('p1'), x: 5, y: 5, vx: -5, vy: -5, onTable: true } },
+		);
+		step(state, 0.001, null);
+		// Puck must have positive velocity along at least one open axis
+		// (east or north) — not driven further into the SW corner.
+		expect(state.puck.vx > 0 || state.puck.vy > 0).toBe(true);
+	});
+
+	test('SW-corner puck squirts north when mallet pushes primarily from the east', () => {
+		// Mallet mostly east of puck → east is blocked, so escape runs along
+		// the perpendicular (north) tangent.
+		const state = makeState(
+			{ x: PUCK_RADIUS, y: PUCK_RADIUS, vx: 0, vy: 0 },
+			{ p1: { ...createMallet('p1'), x: 6, y: 3, vx: -5, vy: 0, onTable: true } },
+		);
+		step(state, 0.001, null);
+		expect(state.puck.vy).toBeGreaterThan(0);
+	});
+
+	test('SW-corner puck squirts east when mallet pushes primarily from the north', () => {
+		// Mallet mostly north of puck → north is blocked, so escape runs along
+		// the perpendicular (east) tangent.
+		const state = makeState(
+			{ x: PUCK_RADIUS, y: PUCK_RADIUS, vx: 0, vy: 0 },
+			{ p1: { ...createMallet('p1'), x: 3, y: 6, vx: 0, vy: -5, onTable: true } },
+		);
+		step(state, 0.001, null);
+		expect(state.puck.vx).toBeGreaterThan(0);
+	});
+
+	test('SE-corner puck escapes west when mallet approaches from NW', () => {
+		const state = makeState(
+			{ x: TABLE_WIDTH - PUCK_RADIUS, y: PUCK_RADIUS, vx: 0, vy: 0 },
+			{ p1: { ...createMallet('p1'), x: TABLE_WIDTH - 5, y: 5, vx: 5, vy: -5, onTable: true } },
+		);
+		step(state, 0.001, null);
+		expect(state.puck.vx < 0 || state.puck.vy > 0).toBe(true);
+	});
+
+	test('NW-corner puck escapes east when mallet approaches from SE', () => {
+		const state = makeState(
+			{ x: PUCK_RADIUS, y: TABLE_LENGTH - PUCK_RADIUS, vx: 0, vy: 0 },
+			{ p2: { ...createMallet('p2'), x: 5, y: TABLE_LENGTH - 5, vx: -5, vy: 5, onTable: true } },
+		);
+		step(state, 0.001, null);
+		expect(state.puck.vx > 0 || state.puck.vy < 0).toBe(true);
+	});
+
+	test('NE-corner puck escapes when mallet approaches from SW', () => {
+		const state = makeState(
+			{ x: TABLE_WIDTH - PUCK_RADIUS, y: TABLE_LENGTH - PUCK_RADIUS, vx: 0, vy: 0 },
+			{ p2: { ...createMallet('p2'), x: TABLE_WIDTH - 5, y: TABLE_LENGTH - 5, vx: 5, vy: 5, onTable: true } },
+		);
+		step(state, 0.001, null);
+		expect(state.puck.vx < 0 || state.puck.vy < 0).toBe(true);
+	});
+
+	test('corner escape completes within a handful of ticks', () => {
+		// Simulates repeated contact from a mallet nudging into the corner.
+		const state = makeState(
+			{ x: PUCK_RADIUS, y: PUCK_RADIUS, vx: 0, vy: 0 },
+			{ p1: { ...createMallet('p1'), x: 5, y: 5, vx: -2, vy: -2, onTable: true } },
+		);
+		for (let i = 0; i < 20; i++) step(state, 1 / 120, null);
+		// Puck must have moved out of the literal corner position.
+		const dist = Math.hypot(state.puck.x - PUCK_RADIUS, state.puck.y - PUCK_RADIUS);
+		expect(dist).toBeGreaterThan(1);
+	});
+});
+
 // ─── Continuous events ───────────────────────────────────────────────────────
 
 describe('continuous events', () => {

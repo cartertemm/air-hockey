@@ -106,30 +106,59 @@ function resolveMallet(puck, mallet, player, state, emitter) {
 
 	if (dist >= minDist || dist === 0) return;
 
-	// Collision normal: from mallet center toward puck center
-	const nx = dx / dist;
-	const ny = dy / dist;
+	// Raw collision normal: from mallet center toward puck center.
+	const rawNx = dx / dist;
+	const rawNy = dy / dist;
 
-	// Push puck out of mallet
+	// Corner-pin detection: if the puck is wedged against two walls, the raw
+	// normal would push it deeper into them — the walls reflect it back into
+	// the mallet, and (with a stationary or slow-pressing mallet) the puck
+	// oscillates or stops dead in the corner. Redirect the response along an
+	// open wall tangent so the puck slides out instead.
+	const inGoalSlotX = puck.x >= GOAL_X_MIN && puck.x <= GOAL_X_MAX;
+	const tol = 0.01;
+	const againstWest  = puck.x <= PUCK_RADIUS + tol;
+	const againstEast  = puck.x >= TABLE_WIDTH - PUCK_RADIUS - tol;
+	const againstSouth = puck.y <= PUCK_RADIUS + tol && !inGoalSlotX;
+	const againstNorth = puck.y >= TABLE_LENGTH - PUCK_RADIUS - tol && !inGoalSlotX;
+	const inCorner = (againstWest || againstEast) && (againstSouth || againstNorth);
+
+	let nx = rawNx;
+	let ny = rawNy;
+	if (inCorner) {
+		// Escape perpendicular to the axis where the mallet is further away:
+		// that tangent has the clearer path to separation.
+		if (Math.abs(dy) < Math.abs(dx)) {
+			nx = 0;
+			ny = againstSouth ? 1 : -1;
+		} else {
+			nx = againstWest ? 1 : -1;
+			ny = 0;
+		}
+	}
+
+	// Push puck out of mallet along the chosen direction.
 	const overlap = minDist - dist;
 	puck.x += nx * overlap;
 	puck.y += ny * overlap;
 
-	// Relative velocity of puck with respect to mallet
+	// Approach check uses the raw normal — it reflects the actual closing
+	// geometry regardless of which direction we send the puck.
 	const vrx = puck.vx - mallet.vx;
 	const vry = puck.vy - mallet.vy;
-	const vRelNormal = vrx * nx + vry * ny;
+	const vRelNormal = vrx * rawNx + vry * rawNy;
 
-	// Only resolve if objects are approaching
 	if (vRelNormal >= 0) return;
 
-	// Mallet treated as infinite mass: all impulse goes to puck
+	// Mallet treated as infinite mass: all impulse goes to puck, applied
+	// along the (possibly redirected) escape direction.
 	const impulse = -(1 + RESTITUTION_MALLET) * vRelNormal;
 	puck.vx += impulse * nx;
 	puck.vy += impulse * ny;
 
-	// Tangential relative velocity imparts spin
-	const vRelTangential = vrx * (-ny) + vry * nx;
+	// Tangential relative velocity imparts spin — computed from raw geometry
+	// so spin transfer remains physically meaningful.
+	const vRelTangential = vrx * (-rawNy) + vry * rawNx;
 	puck.omega += vRelTangential * SPIN_FROM_MALLET_HIT;
 
 	clampVelocity(puck);
