@@ -3,6 +3,7 @@ import { startSession } from '../src/session.js';
 import { setIdentityFromWelcome, getIdentity, clearIdentity } from '../src/identity.js';
 import { getSpeechMode, setSpeechMode, getRate, getPitch, getVoice, SPEECH_MODE_TTS } from '../src/speech.js';
 import { MSG, ERR } from 'network/protocol.js';
+import * as settings from '../src/settings.js';
 
 function makeFakeClient() {
 	const handlers = {};
@@ -76,6 +77,82 @@ async function flushAsyncWork() {
 beforeEach(() => {
 	document.body.innerHTML = '';
 	clearIdentity();
+});
+
+describe('session: iOS install prompt', () => {
+	test('shown on first iOS-non-standalone boot', () => {
+		const root = setupRoot();
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => true,
+			isIOSStandalone: () => false,
+		});
+		expect(root.querySelector('h1').textContent).toBe('Install for the best experience');
+		expect([...root.querySelectorAll('button')].some(b => b.textContent === 'Continue anyway')).toBe(true);
+	});
+
+	test('skipped when running as iOS standalone', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => true,
+			isIOSStandalone: () => true,
+		});
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('skipped on non-iOS platforms', () => {
+		const root = setupRoot();
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => false,
+			isIOSStandalone: () => false,
+		});
+		expect(root.querySelector('h1').textContent).toBe('Your name');
+	});
+
+	test('skipped when pwaPromptDismissed is already set', () => {
+		settings.set('pwaPromptDismissed', true);
+		const root = setupRoot();
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => true,
+			isIOSStandalone: () => false,
+		});
+		expect(root.querySelector('h1').textContent).toBe('Your name');
+	});
+
+	test('Continue sets the flag and routes to nameEntry when no stored name', () => {
+		const root = setupRoot();
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => true,
+			isIOSStandalone: () => false,
+		});
+		clickText(root, 'Continue anyway');
+		expect(settings.get('pwaPromptDismissed')).toBe(true);
+		expect(root.querySelector('h1').textContent).toBe('Your name');
+	});
+
+	test('Continue sets the flag and routes to offline menu when name is stored', () => {
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const root = setupRoot();
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => true,
+			isIOSStandalone: () => false,
+		});
+		clickText(root, 'Continue anyway');
+		expect(settings.get('pwaPromptDismissed')).toBe(true);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
 });
 
 describe('session: first load', () => {
@@ -316,7 +393,7 @@ describe('session: Escape goes back', () => {
 	test('Escape is ignored on iOS', () => {
 		const root = setupRoot();
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
-		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Test speakers').click();
 		expect(root.querySelector('h1').textContent).toBe('Test speakers');
 		dispatchEscape(root);
@@ -405,7 +482,7 @@ describe('session: settings screen', () => {
 	test('iOS opens settings without output mode radios', () => {
 		const root = setupRoot();
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
-		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		expect(root.querySelector('#settings-mode-aria')).toBeNull();
 		expect(root.querySelector('#settings-mode-tts')).toBeNull();
@@ -417,7 +494,7 @@ describe('session: settings screen', () => {
 	test('rate slider change persists via setRate', () => {
 		const root = setupRoot();
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
-		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		const slider = root.querySelector('#settings-rate');
 		slider.value = '1.4';
@@ -428,7 +505,7 @@ describe('session: settings screen', () => {
 	test('pitch slider change persists via setPitch', () => {
 		const root = setupRoot();
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
-		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		const slider = root.querySelector('#settings-pitch');
 		slider.value = '0.6';
@@ -443,7 +520,7 @@ describe('session: settings screen', () => {
 			{ name: 'Alpha', voiceURI: 'a' },
 			{ name: 'Beta',  voiceURI: 'b' },
 		];
-		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		const select = root.querySelector('#settings-voice');
 		select.value = 'b';
@@ -459,7 +536,7 @@ describe('session: settings screen', () => {
 		// TTS, but speech.js reads navigator.standalone directly rather than
 		// the injected isIOS fake).
 		setSpeechMode(SPEECH_MODE_TTS);
-		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Test voice').click();
 		expect(globalThis.speechSynthesis.spoken.length).toBe(1);
@@ -470,7 +547,7 @@ describe('session: settings screen', () => {
 		const root = setupRoot();
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		globalThis.speechSynthesis.voices = [];
-		startSession({ root, createClient: makeFakeClient(), isIOS: () => true });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		const before = [...root.querySelectorAll('#settings-voice option')].map(o => o.textContent);
 		expect(before).toContain('(no voices available)');
@@ -1060,6 +1137,7 @@ describe('session: handoff and countdown', () => {
 			root,
 			createClient: factory,
 			isIOS: () => true,
+			isIOSStandalone: () => true,
 			loadGameplay: async () => ({
 				Game: class {},
 				createGameAudio: () => ({ attach() {}, dispose() {} }),

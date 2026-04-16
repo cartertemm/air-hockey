@@ -2,7 +2,8 @@ import { getIdentity, setIdentityFromWelcome, setDisplayName } from './identity.
 import { generateName } from './names.js';
 import { renderScreen } from './ui.js';
 import { createClient as realCreateClient } from './net/client.js';
-import { isIOSStandalone } from './platform.js';
+import { isIOS as isIOSPlatform, isIOSStandalone as isIOSStandaloneDefault } from './platform.js';
+import * as settings from './settings.js';
 import { initTouch, disposeTouch } from './input/touch.js';
 import {
 	initSpeech,
@@ -62,7 +63,13 @@ async function loadGameBundle() {
 
 // startSession accepts dependency overrides for tests. Call sites in app code
 // pass no options; tests inject createClient/isIOS fakes.
-export function startSession({ root, createClient = realCreateClient, isIOS = isIOSStandalone, loadGameplay = loadGameBundle } = {}) {
+export function startSession({
+	root,
+	createClient = realCreateClient,
+	isIOS = isIOSPlatform,
+	isIOSStandalone = isIOSStandaloneDefault,
+	loadGameplay = loadGameBundle,
+} = {}) {
 	let state = null;
 	let currentScreen = null;
 	let client = null;
@@ -88,6 +95,18 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 	}
 
 	// ---- Screen builders -------------------------------------------------
+
+	function screenInstallPwaIos() {
+		const proceed = () => {
+			settings.set('pwaPromptDismissed', true);
+			const { name } = getIdentity();
+			go(name ? screenOfflineMenu() : screenNameEntry());
+		};
+		return {
+			screen: 'installPwaIos',
+			props: { onContinue: proceed },
+		};
+	}
 
 	function screenNameEntry() {
 		return {
@@ -514,6 +533,11 @@ export function startSession({ root, createClient = realCreateClient, isIOS = is
 		state.onEscape();
 	});
 	const { name } = getIdentity();
-	if (!name) go(screenNameEntry());
-	else go(screenOfflineMenu());
+	if (isIOS() && !isIOSStandalone() && !settings.get('pwaPromptDismissed', false)) {
+		go(screenInstallPwaIos());
+	} else if (!name) {
+		go(screenNameEntry());
+	} else {
+		go(screenOfflineMenu());
+	}
 }
