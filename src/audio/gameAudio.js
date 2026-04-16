@@ -21,6 +21,9 @@ const defaultSounds = {
 	placePuck:  sfx(() => import('../../sounds/place_puck.ogg?url')),
 };
 
+const TABLE_LOOP_START_PITCH = 0.5;
+const TABLE_LOOP_RAMP_MS = 1000;
+
 const VOL = {
 	tableLoop: 0.35,
 	puckLoop: 0.6,
@@ -53,13 +56,16 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 	let active = false;
 	let detachListeners = () => {};
 
-	function shouldRunTableLoop(state) {
-		return state === 'COUNTDOWN' || state === 'SERVE' || state === 'PLAYING' || state === 'PAUSED';
+	// Table loop starts after the countdown ends, to mimic a real air hockey
+	// table's air jets spinning up once play begins — hence the pitch ramp.
+	function isActivePlay(state) {
+		return state === 'SERVE' || state === 'PLAYING' || state === 'PAUSED';
 	}
 
 	function ensureTableLoop() {
 		if (!sounds.tableLoop.isLooping()) {
 			sounds.tableLoop.play({ loop: 'infinite', volume: VOL.tableLoop });
+			sounds.tableLoop.rampPitch({ from: TABLE_LOOP_START_PITCH, to: 1, durationMs: TABLE_LOOP_RAMP_MS });
 		}
 	}
 
@@ -99,7 +105,7 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 
 	function onSnapshot(snapshot) {
 		if (!active) return;
-		if (shouldRunTableLoop(snapshot.state)) ensureTableLoop();
+		if (isActivePlay(snapshot.state)) ensureTableLoop();
 		if (snapshot.puck?.onTable) {
 			if (!sounds.puckLoop.isLooping()) {
 				sounds.puckLoop.play({
@@ -114,7 +120,7 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 			sounds.puckLoop.stop();
 		}
 		const localMallet = snapshot.mallets?.[localPlayer];
-		if (shouldRunTableLoop(snapshot.state) && localMallet?.onTable) {
+		if (isActivePlay(snapshot.state) && localMallet?.onTable) {
 			if (!sounds.malletLoop.isLooping()) {
 				sounds.malletLoop.play({
 					loop: 'infinite',
@@ -140,7 +146,6 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 			const offGameStart = game.on('gameStart', (msg) => {
 				if (!active) return;
 				localPlayer = msg.localPlayer;
-				ensureTableLoop();
 			});
 			const offEvent = game.on('event', onEvent);
 			const offSnapshot = game.on('snapshot', onSnapshot);

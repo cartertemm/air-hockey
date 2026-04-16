@@ -4,7 +4,9 @@
 // AudioContext. play({loop:'infinite'}) is idempotent: calling again while
 // already looping is a no-op. play() accepts {position:[x,y,z]} for the
 // initial 3D position; setPosition() updates position on a sound that's
-// already loaded or playing (e.g. tracking a moving puck).
+// already loaded or playing (e.g. tracking a moving puck). rampPitch()
+// animates playbackRate (which shifts pitch and speed together — useful
+// for motor/spin-up effects on looping sounds).
 
 let modulePromise = null;
 function loadModule() {
@@ -26,6 +28,13 @@ export function sfx(urlImporter) {
 	let looping = false;
 	let epoch = 0;
 	let currentInst = null;
+	let rampHandle = 0;
+	function cancelRamp() {
+		if (rampHandle) {
+			cancelAnimationFrame(rampHandle);
+			rampHandle = 0;
+		}
+	}
 	function ensureLoaded() {
 		if (!handlePromise) {
 			handlePromise = (async () => {
@@ -58,6 +67,7 @@ export function sfx(urlImporter) {
 			return looping && currentInst?.isPlaying !== false;
 		},
 		async stop() {
+			cancelRamp();
 			epoch++;
 			looping = false;
 			const inst = currentInst;
@@ -72,6 +82,35 @@ export function sfx(urlImporter) {
 			} catch {
 				/* ignore */
 			}
+		},
+		// Animate playbackRate from `from` to `to` linearly over `durationMs`.
+		// Intended to be called after play(); awaits the load so ordering with
+		// an un-awaited play() is safe (both share the same handlePromise, and
+		// play()'s continuation sets currentInst before this one runs).
+		rampPitch({ from, to, durationMs }) {
+			cancelRamp();
+			const myEpoch = epoch;
+			(async () => {
+				try {
+					await ensureLoaded();
+				} catch {
+					return;
+				}
+				if (myEpoch !== epoch || !currentInst) return;
+				const startTime = performance.now();
+				currentInst.playbackRate = from;
+				const tick = () => {
+					if (myEpoch !== epoch || !currentInst) {
+						rampHandle = 0;
+						return;
+					}
+					const elapsed = performance.now() - startTime;
+					const t = durationMs > 0 ? Math.min(elapsed / durationMs, 1) : 1;
+					currentInst.playbackRate = from + (to - from) * t;
+					rampHandle = t < 1 ? requestAnimationFrame(tick) : 0;
+				};
+				rampHandle = requestAnimationFrame(tick);
+			})();
 		},
 		update(options = {}) {
 			if (!currentInst) return;

@@ -28,6 +28,7 @@ function fakeSfx() {
 			looping = false;
 		}),
 		update: vi.fn(),
+		rampPitch: vi.fn(),
 		isLooping: vi.fn(() => looping),
 		load: vi.fn(async () => {}),
 	};
@@ -61,13 +62,13 @@ describe('game audio loops', () => {
 		const game = createFakeGame();
 		audio.attach(game);
 		game.emit('snapshot', {
-			state: 'COUNTDOWN',
+			state: 'SERVE',
 			puck: { onTable: true, x: 24 },
 		});
 		expect(sounds.tableLoop.play).toHaveBeenCalledTimes(1);
 		expect(sounds.puckLoop.play).toHaveBeenCalledTimes(1);
 		game.emit('snapshot', {
-			state: 'COUNTDOWN',
+			state: 'SERVE',
 			puck: { onTable: true, x: 30 },
 		});
 		expect(sounds.tableLoop.play).toHaveBeenCalledTimes(1);
@@ -112,18 +113,29 @@ describe('game audio loops', () => {
 		expect(sounds.puckLoop.play).toHaveBeenCalledTimes(1);
 	});
 
-	test('table loop starts on gameStart before snapshots arrive', () => {
+	test('table loop stays silent through gameStart and countdown, then starts on SERVE with a pitch ramp', () => {
 		const sounds = makeSounds();
 		const audio = createGameAudio({ sounds });
 		const game = createFakeGame();
 		audio.attach(game);
 		game.emit('gameStart', { localPlayer: 'p2', pointLimit: 7 });
-		expect(sounds.tableLoop.play).toHaveBeenCalledTimes(1);
+		expect(sounds.tableLoop.play).not.toHaveBeenCalled();
 		game.emit('snapshot', {
 			state: 'COUNTDOWN',
 			puck: { onTable: false, x: 24 },
 		});
+		expect(sounds.tableLoop.play).not.toHaveBeenCalled();
+		game.emit('snapshot', {
+			state: 'SERVE',
+			puck: { onTable: true, x: 24 },
+		});
 		expect(sounds.tableLoop.play).toHaveBeenCalledTimes(1);
+		expect(sounds.tableLoop.rampPitch).toHaveBeenCalledTimes(1);
+		expect(sounds.tableLoop.rampPitch).toHaveBeenCalledWith(expect.objectContaining({
+			from: 0.5,
+			to: 1,
+			durationMs: 1000,
+		}));
 	});
 
 	test('mallet loop tracks local mallet x and stops when off-table or outside gameplay', () => {
@@ -179,6 +191,10 @@ describe('game audio loops', () => {
 		const game = createFakeGame();
 		audio.attach(game);
 		game.emit('gameStart', { localPlayer: 'p1', pointLimit: 7 });
+		game.emit('snapshot', {
+			state: 'SERVE',
+			puck: { onTable: true, x: 24 },
+		});
 		expect(sounds.tableLoop.play).toHaveBeenCalledTimes(1);
 		// Simulate external kill (audio engine stops the loop)
 		tableLoopExternalState = false;

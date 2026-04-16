@@ -43,7 +43,6 @@ const ROOM_ERROR_MESSAGES = {
 const speakerTest          = sfx(() => import('../sounds/speaker_test.ogg?url'));
 const connectNotification  = sfx(() => import('../sounds/connect_notification.ogg?url'));
 const disconnectNotification = sfx(() => import('../sounds/disconnect_notification.ogg?url'));
-const tableLoop            = sfx(() => import('../sounds/table_loop.ogg?url'));
 let gameBundlePromise = null;
 async function loadGameBundle() {
 	if (gameBundlePromise) return gameBundlePromise;
@@ -226,9 +225,7 @@ export function startSession({
 	function screenWaitingRoom(room) {
 		const me = findMe(room);
 		const localReady = me?.ready ?? false;
-		tableLoop.play({ loop: 'infinite' });
 		const leave = () => {
-			tableLoop.stop();
 			client?.send(roomLeave());
 			go(screenOnlineMenu());
 		};
@@ -246,7 +243,6 @@ export function startSession({
 			onMessage: (msg) => {
 				if (msg.type === MSG.ROOM_STATE) {
 					if (msg.room.phase === 'ready') {
-						tableLoop.stop();
 						go(screenHandoff(msg.room));
 					} else {
 						go(screenWaitingRoom(msg.room));
