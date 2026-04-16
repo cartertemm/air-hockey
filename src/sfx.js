@@ -25,6 +25,7 @@ export function sfx(urlImporter) {
 	let handlePromise = null;
 	let looping = false;
 	let epoch = 0;
+	let currentInst = null;
 	function ensureLoaded() {
 		if (!handlePromise) {
 			handlePromise = (async () => {
@@ -43,10 +44,10 @@ export function sfx(urlImporter) {
 				const loaded = await ensureLoaded();
 				if (myEpoch !== epoch || !loaded) return;
 				if (options.loop) {
-					if (looping) return;
+					if (looping && currentInst?.isPlaying !== false) return;
 					looping = true;
 				}
-				loaded.sound.playSound(loaded.handle, options);
+				currentInst = loaded.sound.playSound(loaded.handle, options);
 			} catch (err) {
 				console.warn('sfx play failed', err);
 				handlePromise = null;
@@ -56,6 +57,11 @@ export function sfx(urlImporter) {
 		async stop() {
 			epoch++;
 			looping = false;
+			const inst = currentInst;
+			currentInst = null;
+			if (inst) {
+				inst.stop?.();
+			}
 			if (!handlePromise) return;
 			try {
 				const loaded = await handlePromise;
@@ -63,6 +69,11 @@ export function sfx(urlImporter) {
 			} catch {
 				/* ignore */
 			}
+		},
+		update(options = {}) {
+			if (!currentInst) return;
+			if (typeof options.pan === 'number') currentInst.stereoPan = options.pan;
+			if (typeof options.volume === 'number') currentInst.volume = options.volume;
 		},
 		async setPosition(position) {
 			try {
