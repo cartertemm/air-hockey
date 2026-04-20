@@ -1,5 +1,4 @@
 import { MSG, signalOffer, signalAnswer, signalIce } from './protocol.js';
-import { WebRTCTransport } from './webrtcTransport.js';
 
 /**
  * Server-relay signaling: uses an existing WebSocket (wrapped socket) to
@@ -30,47 +29,74 @@ export function createServerSignaling(socket) {
 }
 
 /**
+ * Wraps a PeerJS DataConnection with the GameTransport interface.
+ * Uses PeerJS's public API (conn.send, conn.on('data')) instead of
+ * extracting the raw DataChannel, which PeerJS manages internally.
+ */
+class PeerJSTransport {
+	constructor(conn) {
+		this._conn = conn;
+		this._onMessage = null;
+		this._onClose = null;
+		conn.on('data', data => this._onMessage?.(data));
+		conn.on('close', () => this._onClose?.());
+	}
+	send(msg) {
+		this._conn.send(msg);
+	}
+	close() {
+		this._conn.close();
+	}
+	onMessage(cb) {
+		this._onMessage = cb;
+	}
+	onClose(cb) {
+		this._onClose = cb;
+	}
+}
+
+/**
  * PeerJS host: creates a Peer with id = roomCode, waits for an inbound connection.
+ * Returns a promise that resolves once the host is registered with the PeerJS
+ * cloud server and ready to accept connections.
  *
  * @param {string} roomCode
- * @returns {{ onConnection(cb), dispose() }}
+ * @returns {Promise<{ onConnection(cb), dispose() }>}
  */
-export function createPeerHost(roomCode) {
-	let peer = null;
-	let connectionCb = null;
-	let started = false;
-	async function start() {
-		const { Peer } = await import('peerjs');
-		peer = new Peer(roomCode);
-		peer.on('connection', conn => {
-			conn.on('open', () => {
-				const transport = new WebRTCTransport(conn.dataChannel, conn.peerConnection);
-				connectionCb?.(transport);
+export async function createPeerHost(roomCode) {
+	const { Peer } = await import('peerjs');
+	return new Promise((resolve, reject) => {
+		const peer = new Peer(roomCode);
+		let connectionCb = null;
+		peer.on('open', () => {
+			peer.on('connection', conn => {
+				conn.on('open', () => {
+					connectionCb?.(new PeerJSTransport(conn));
+				});
+			});
+			resolve({
+				onConnection(cb) { connectionCb = cb; },
+				dispose() { peer.destroy(); },
 			});
 		});
-	}
-	start().catch(() => {});
-	return {
-		onConnection(cb) { connectionCb = cb; },
-		dispose() { peer?.destroy(); },
-	};
+		peer.on('error', reject);
+	});
 }
 
 /**
  * PeerJS guest: connects to roomCode, resolves with a GameTransport.
  *
  * @param {string} roomCode
- * @returns {Promise<WebRTCTransport>}
+ * @returns {Promise<PeerJSTransport>}
  */
 export async function createPeerGuest(roomCode) {
 	const { Peer } = await import('peerjs');
 	return new Promise((resolve, reject) => {
 		const peer = new Peer();
 		peer.on('open', () => {
-			const conn = peer.connect(roomCode);
+			const conn = peer.connect(roomCode, { reliable: true });
 			conn.on('open', () => {
-				const transport = new WebRTCTransport(conn.dataChannel, conn.peerConnection);
-				resolve(transport);
+				resolve(new PeerJSTransport(conn));
 			});
 			conn.on('error', reject);
 		});

@@ -214,7 +214,7 @@ export function startSession({
 				peerHost = createPeerHostOverride(handle.roomCode);
 			} else {
 				const { createPeerHost } = await import('network/signaling.js');
-				peerHost = createPeerHost(handle.roomCode);
+				peerHost = await createPeerHost(handle.roomCode);
 			}
 			peerHost.onConnection((guestTransport) => {
 				transitioned = true;
