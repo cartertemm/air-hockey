@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { GameSession } from '../server/gameSession.js';
+import { GameSession } from '../game/gameSession.js';
 import { MSG } from '../network/protocol.js';
 import { MALLET_RADIUS, TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
 import { State } from '../src/stateMachine.js';

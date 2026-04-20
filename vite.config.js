@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => {
 		resolve: {
 			alias: {
 				network: path.resolve(__dirname, 'network'),
+				game: path.resolve(__dirname, 'game'),
 			},
 		},
 		server: {

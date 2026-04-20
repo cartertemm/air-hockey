@@ -1,5 +1,5 @@
 import { MSG, ERR, roomState, roomCountdown, lobbyUpdate } from '../network/protocol.js';
-import { GameSession } from './gameSession.js';
+import { GameSession } from '../game/gameSession.js';
 
 const ADJECTIVES = ['swift', 'brave', 'quiet', 'bright', 'calm', 'wild'];
 const NOUNS      = ['otter', 'falcon', 'comet', 'ember', 'river', 'spark'];
