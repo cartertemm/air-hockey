@@ -10,6 +10,9 @@ import {
 	roomCountdown,
 	lobbyUpdate,
 	error,
+	signalOffer,
+	signalAnswer,
+	signalIce,
 	encode,
 	decode,
 	ProtocolError,
@@ -31,6 +34,12 @@ describe('protocol constants', () => {
 		expect(MSG.ROOM_COUNTDOWN).toBe('room:countdown');
 		expect(MSG.LOBBY_UPDATE).toBe('lobby:update');
 		expect(MSG.ERROR).toBe('error');
+	});
+
+	test('MSG contains signal types', () => {
+		expect(MSG.SIGNAL_OFFER).toBe('signal:offer');
+		expect(MSG.SIGNAL_ANSWER).toBe('signal:answer');
+		expect(MSG.SIGNAL_ICE).toBe('signal:ice');
 	});
 
 	test('MSG is frozen', () => {
@@ -96,6 +105,19 @@ describe('protocol factories', () => {
 		expect(error({ code: 'room_full', message: 'nope' })).toEqual({
 			type: 'error', code: 'room_full', message: 'nope',
 		});
+	});
+
+	test('signalOffer factory', () => {
+		expect(signalOffer({ sdp: 'v=0...' })).toEqual({ type: 'signal:offer', sdp: 'v=0...' });
+	});
+
+	test('signalAnswer factory', () => {
+		expect(signalAnswer({ sdp: 'v=0 answer' })).toEqual({ type: 'signal:answer', sdp: 'v=0 answer' });
+	});
+
+	test('signalIce factory', () => {
+		const candidate = { candidate: 'candidate:...', sdpMid: 'data', sdpMLineIndex: 0 };
+		expect(signalIce({ candidate })).toEqual({ type: 'signal:ice', candidate });
 	});
 });
 

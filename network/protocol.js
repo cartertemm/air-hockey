@@ -12,6 +12,10 @@ export const MSG = Object.freeze({
 	INPUT:             'input',
 	PAUSE_TOGGLE:      'pause:toggle',
 	SCORE_READOUT:     'score:readout',
+	// Signaling (bidirectional relay)
+	SIGNAL_OFFER:      'signal:offer',
+	SIGNAL_ANSWER:     'signal:answer',
+	SIGNAL_ICE:        'signal:ice',
 	// Server -> Client
 	WELCOME:           'welcome',
 	LOBBY_UPDATE:      'lobby:update',
@@ -108,6 +112,18 @@ export function inputMsg({ tick, x, y, onTable }) {
 
 export function scoreReadoutMsg() {
 	return { type: MSG.SCORE_READOUT };
+}
+
+export function signalOffer({ sdp }) {
+	return { type: MSG.SIGNAL_OFFER, sdp };
+}
+
+export function signalAnswer({ sdp }) {
+	return { type: MSG.SIGNAL_ANSWER, sdp };
+}
+
+export function signalIce({ candidate }) {
+	return { type: MSG.SIGNAL_ICE, candidate };
 }
 
 export function pauseToggleMsg() {

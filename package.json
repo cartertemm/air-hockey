@@ -4,16 +4,17 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev":        "vite",
-		"server":     "node server/index.js",
-		"start":      "npm run server",
-		"build":      "vite build",
-		"preview":    "vite preview",
-		"test":       "vitest run",
+		"dev": "vite",
+		"server": "node server/index.js",
+		"start": "npm run server",
+		"build": "vite build",
+		"preview": "vite preview",
+		"test": "vitest run",
 		"test:watch": "vitest"
 	},
 	"dependencies": {
 		"cacophony": "^0.18.3",
+		"peerjs": "^1.5.5",
 		"ws": "^8.20.0"
 	},
 	"devDependencies": {

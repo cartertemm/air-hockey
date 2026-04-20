@@ -98,6 +98,15 @@ export function handleConnection(rawSocket) {
 				break;
 			case MSG.SCORE_READOUT:
 				break;
+			case MSG.SIGNAL_OFFER:
+			case MSG.SIGNAL_ANSWER:
+			case MSG.SIGNAL_ICE: {
+				const room = player.room;
+				if (!room) break;
+				const target = room.members.find(m => m !== player);
+				target?.send(msg);
+				break;
+			}
 			case MSG.LOBBY_SUBSCRIBE:
 				subscribeLobby(player);
 				break;
