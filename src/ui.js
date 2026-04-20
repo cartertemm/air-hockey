@@ -274,6 +274,14 @@ const SCREENS = {
 		]);
 	},
 
+	joinFailed(root, props) {
+		mount(root, [
+			el('h1', { text: 'Could not join' }),
+			el('p', { role: 'alert', text: props.message }),
+			el('button', { text: 'Back', onClick: props.onBack, autoFocus: true }),
+		]);
+	},
+
 	testSpeakers(root, props) {
 		mount(root, [
 			el('h1', { text: 'Test speakers' }),

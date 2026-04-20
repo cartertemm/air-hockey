@@ -1508,7 +1508,7 @@ describe('session: WebRTC guest flow', () => {
 		expect(guestTransport.close).toHaveBeenCalled();
 	});
 
-	test('PeerJS connection failure returns to menu', async () => {
+	test('PeerJS connection failure shows error screen', async () => {
 		window.location.hash = '#join=webrtc-room-5';
 		const root = setupRoot();
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
@@ -1520,6 +1520,7 @@ describe('session: WebRTC guest flow', () => {
 		});
 		expect(root.querySelector('h1').textContent).toBe('Joining game');
 		await flushAsyncWork();
-		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+		expect(root.querySelector('h1').textContent).toBe('Could not join');
+		expect(root.querySelector('p').textContent).toBe('connection failed');
 	});
 });

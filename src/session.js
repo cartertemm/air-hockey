@@ -221,7 +221,11 @@ export function startSession({
 				handle.connectGuest(guestTransport);
 				go(screenLocalGameplay(handle.hostTransport));
 			});
-		})().catch(err => console.warn('PeerJS host setup failed', err));
+		})().catch(err => {
+			console.warn('PeerJS host setup failed', err);
+			handle.dispose();
+			go(screenJoinFailed('Could not start signaling server: ' + (err.message ?? 'unknown error')));
+		});
 		const cancel = () => {
 			peerHost?.dispose();
 			handle.dispose();
@@ -259,7 +263,7 @@ export function startSession({
 		})().catch(err => {
 			if (!disposed) {
 				console.warn('Failed to join game', err);
-				go(screenOfflineMenu());
+				go(screenJoinFailed(err.message ?? 'Could not connect to host.'));
 			}
 		});
 		const cancel = () => {
@@ -275,6 +279,15 @@ export function startSession({
 			},
 			onEscape: cancel,
 			onDispose: () => { disposed = true; },
+		};
+	}
+
+	function screenJoinFailed(message) {
+		const back = () => go(screenOfflineMenu());
+		return {
+			screen: 'joinFailed',
+			props: { message, onBack: back },
+			onEscape: back,
 		};
 	}
 

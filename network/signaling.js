@@ -1,5 +1,8 @@
 import { MSG, signalOffer, signalAnswer, signalIce } from './protocol.js';
 
+const PEER_TIMEOUT_MS = 10000;
+const PEER_ID_PREFIX = 'ah-';
+
 /**
  * Server-relay signaling: uses an existing WebSocket (wrapped socket) to
  * forward offer/answer/ICE between peers via the game server.
@@ -55,10 +58,15 @@ class PeerJSTransport {
 	}
 }
 
+function peerIdFor(roomCode) {
+	return PEER_ID_PREFIX + roomCode;
+}
+
 /**
- * PeerJS host: creates a Peer with id = roomCode, waits for an inbound connection.
- * Returns a promise that resolves once the host is registered with the PeerJS
- * cloud server and ready to accept connections.
+ * PeerJS host: creates a Peer with id derived from roomCode, waits for an
+ * inbound connection. Returns a promise that resolves once the host is
+ * registered with the PeerJS cloud server and ready to accept connections.
+ * Rejects after PEER_TIMEOUT_MS if the cloud server is unreachable.
  *
  * @param {string} roomCode
  * @returns {Promise<{ onConnection(cb), dispose() }>}
@@ -66,9 +74,19 @@ class PeerJSTransport {
 export async function createPeerHost(roomCode) {
 	const { Peer } = await import('peerjs');
 	return new Promise((resolve, reject) => {
-		const peer = new Peer(roomCode);
+		const peer = new Peer(peerIdFor(roomCode), { debug: 0 });
 		let connectionCb = null;
+		let settled = false;
+		const timer = setTimeout(() => {
+			if (settled) return;
+			settled = true;
+			peer.destroy();
+			reject(new Error('PeerJS signaling server timed out'));
+		}, PEER_TIMEOUT_MS);
 		peer.on('open', () => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
 			peer.on('connection', conn => {
 				conn.on('open', () => {
 					connectionCb?.(new PeerJSTransport(conn));
@@ -79,12 +97,19 @@ export async function createPeerHost(roomCode) {
 				dispose() { peer.destroy(); },
 			});
 		});
-		peer.on('error', reject);
+		peer.on('error', (err) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			peer.destroy();
+			reject(err);
+		});
 	});
 }
 
 /**
  * PeerJS guest: connects to roomCode, resolves with a GameTransport.
+ * Rejects after PEER_TIMEOUT_MS if connection cannot be established.
  *
  * @param {string} roomCode
  * @returns {Promise<PeerJSTransport>}
@@ -92,14 +117,36 @@ export async function createPeerHost(roomCode) {
 export async function createPeerGuest(roomCode) {
 	const { Peer } = await import('peerjs');
 	return new Promise((resolve, reject) => {
-		const peer = new Peer();
+		const peer = new Peer({ debug: 0 });
+		let settled = false;
+		const timer = setTimeout(() => {
+			if (settled) return;
+			settled = true;
+			peer.destroy();
+			reject(new Error('Connection to host timed out'));
+		}, PEER_TIMEOUT_MS);
 		peer.on('open', () => {
-			const conn = peer.connect(roomCode, { reliable: true });
+			const conn = peer.connect(peerIdFor(roomCode), { reliable: true });
 			conn.on('open', () => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timer);
 				resolve(new PeerJSTransport(conn));
 			});
-			conn.on('error', reject);
+			conn.on('error', (err) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timer);
+				peer.destroy();
+				reject(err);
+			});
 		});
-		peer.on('error', reject);
+		peer.on('error', (err) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			peer.destroy();
+			reject(err);
+		});
 	});
 }
