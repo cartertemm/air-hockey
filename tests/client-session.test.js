@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from 'vitest';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { startSession } from '../src/session.js';
 import { setIdentityFromWelcome, getIdentity, clearIdentity } from '../src/identity.js';
 import { getSpeechMode, setSpeechMode, getRate, getPitch, getVoice, SPEECH_MODE_TTS } from '../src/speech.js';
@@ -1374,5 +1374,152 @@ describe('session: offline menu shows Host locally', () => {
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		const labels = [...root.querySelectorAll('button')].map(b => b.textContent);
 		expect(labels).toContain('Host locally');
+	});
+});
+
+function makeFakePeerHost() {
+	let connectionCb = null;
+	return {
+		onConnection(cb) { connectionCb = cb; },
+		dispose: vi.fn(),
+		simulateConnection(transport) { connectionCb?.(transport); },
+	};
+}
+
+function makeFakeTransport() {
+	let messageCb = null;
+	let closeCb = null;
+	return {
+		sent: [],
+		send(msg) { this.sent.push(msg); },
+		close: vi.fn(),
+		onMessage(cb) { messageCb = cb; },
+		onClose(cb) { closeCb = cb; },
+		fireMessage(msg) { messageCb?.(msg); },
+	};
+}
+
+describe('session: WebRTC host flow', () => {
+	test('guest connects via PeerJS → transitions to gameplay', async () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const fakePeerHost = makeFakePeerHost();
+		const hostTransport = makeFakeTransport();
+		const guestTransport = makeFakeTransport();
+		let guestConnected = false;
+		const fakeHandle = {
+			hostTransport,
+			roomCode: 'webrtc-room-1',
+			connectGuest: () => { guestConnected = true; },
+			dispose: vi.fn(),
+		};
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => false,
+			createLocalHost: () => fakeHandle,
+			createPeerHost: () => fakePeerHost,
+			loadGameplay: async () => ({
+				Game: class { constructor() { this.client = { handleMessage() {}, flushPending() {} }; } },
+				createGameAudio: () => ({ attach() {}, dispose() {} }),
+				preloadGameAudio: async () => {},
+			}),
+		});
+		clickText(root, 'Host locally');
+		clickText(root, 'Host');
+		await flushAsyncWork();
+		expect(root.querySelector('h1').textContent).toBe('Local game');
+		fakePeerHost.simulateConnection(guestTransport);
+		await flushAsyncWork();
+		expect(guestConnected).toBe(true);
+		const region = root.querySelector('main[role="application"][aria-label="gameplay"]');
+		expect(region).toBeTruthy();
+	});
+
+	test('host cancel while waiting disposes PeerJS host and local host', async () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const fakePeerHost = makeFakePeerHost();
+		const fakeHandle = {
+			hostTransport: makeFakeTransport(),
+			roomCode: 'webrtc-room-2',
+			connectGuest: () => {},
+			dispose: vi.fn(),
+		};
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => false,
+			createLocalHost: () => fakeHandle,
+			createPeerHost: () => fakePeerHost,
+		});
+		clickText(root, 'Host locally');
+		clickText(root, 'Host');
+		await flushAsyncWork();
+		expect(root.querySelector('h1').textContent).toBe('Local game');
+		clickText(root, 'Cancel');
+		expect(fakePeerHost.dispose).toHaveBeenCalled();
+		expect(fakeHandle.dispose).toHaveBeenCalled();
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+});
+
+describe('session: WebRTC guest flow', () => {
+	test('boot with #join=CODE → PeerJS connects → transitions to gameplay', async () => {
+		window.location.hash = '#join=webrtc-room-3';
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const guestTransport = makeFakeTransport();
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => false,
+			createPeerGuest: async () => guestTransport,
+			loadGameplay: async () => ({
+				Game: class { constructor() { this.client = { handleMessage() {}, flushPending() {} }; } },
+				createGameAudio: () => ({ attach() {}, dispose() {} }),
+				preloadGameAudio: async () => {},
+			}),
+		});
+		expect(root.querySelector('h1').textContent).toBe('Joining game');
+		await flushAsyncWork();
+		const region = root.querySelector('main[role="application"][aria-label="gameplay"]');
+		expect(region).toBeTruthy();
+	});
+
+	test('cancel while connecting prevents late connection from transitioning', async () => {
+		window.location.hash = '#join=webrtc-room-4';
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const guestTransport = makeFakeTransport();
+		const connectDeferred = deferred();
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => false,
+			createPeerGuest: () => connectDeferred.promise,
+		});
+		expect(root.querySelector('h1').textContent).toBe('Joining game');
+		clickText(root, 'Cancel');
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+		connectDeferred.resolve(guestTransport);
+		await flushAsyncWork();
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+		expect(guestTransport.close).toHaveBeenCalled();
+	});
+
+	test('PeerJS connection failure returns to menu', async () => {
+		window.location.hash = '#join=webrtc-room-5';
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => false,
+			createPeerGuest: async () => { throw new Error('connection failed'); },
+		});
+		expect(root.querySelector('h1').textContent).toBe('Joining game');
+		await flushAsyncWork();
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
 	});
 });

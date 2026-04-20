@@ -70,6 +70,8 @@ export function startSession({
 	isIOSStandalone = isIOSStandaloneDefault,
 	loadGameplay = loadGameBundle,
 	createLocalHost: createLocalHostOverride,
+	createPeerHost: createPeerHostOverride,
+	createPeerGuest: createPeerGuestOverride,
 } = {}) {
 	let state = null;
 	let currentScreen = null;
@@ -205,7 +207,23 @@ export function startSession({
 
 	function screenLocalWaiting(handle) {
 		const inviteLink = `${window.location.origin}${window.location.pathname}#join=${handle.roomCode}`;
+		let peerHost = null;
+		let transitioned = false;
+		(async () => {
+			if (createPeerHostOverride) {
+				peerHost = createPeerHostOverride(handle.roomCode);
+			} else {
+				const { createPeerHost } = await import('network/signaling.js');
+				peerHost = createPeerHost(handle.roomCode);
+			}
+			peerHost.onConnection((guestTransport) => {
+				transitioned = true;
+				handle.connectGuest(guestTransport);
+				go(screenLocalGameplay(handle.hostTransport));
+			});
+		})().catch(err => console.warn('PeerJS host setup failed', err));
 		const cancel = () => {
+			peerHost?.dispose();
 			handle.dispose();
 			go(screenOfflineMenu());
 		};
@@ -217,12 +235,35 @@ export function startSession({
 				onCancel: cancel,
 			},
 			onEscape: cancel,
-			onDispose: () => {},
+			onDispose: () => {
+				if (!transitioned) peerHost?.dispose();
+			},
 		};
 	}
 
 	function screenJoining(roomCode) {
+		let disposed = false;
+		(async () => {
+			let guestTransport;
+			if (createPeerGuestOverride) {
+				guestTransport = await createPeerGuestOverride(roomCode);
+			} else {
+				const { createPeerGuest } = await import('network/signaling.js');
+				guestTransport = await createPeerGuest(roomCode);
+			}
+			if (disposed) {
+				guestTransport.close();
+				return;
+			}
+			go(screenLocalGameplay(guestTransport));
+		})().catch(err => {
+			if (!disposed) {
+				console.warn('Failed to join game', err);
+				go(screenOfflineMenu());
+			}
+		});
 		const cancel = () => {
+			disposed = true;
 			window.location.hash = '';
 			go(screenOfflineMenu());
 		};
@@ -233,6 +274,7 @@ export function startSession({
 				onCancel: cancel,
 			},
 			onEscape: cancel,
+			onDispose: () => { disposed = true; },
 		};
 	}
 
