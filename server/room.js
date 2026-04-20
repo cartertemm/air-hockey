@@ -1,8 +1,6 @@
 import { MSG, ERR, roomState, roomCountdown, lobbyUpdate } from '../network/protocol.js';
 import { GameSession } from '../game/gameSession.js';
-
-const ADJECTIVES = ['swift', 'brave', 'quiet', 'bright', 'calm', 'wild'];
-const NOUNS      = ['otter', 'falcon', 'comet', 'ember', 'river', 'spark'];
+import { mintRoomId } from '../game/roomId.js';
 
 // ---- Room instances ------------------------------------------------------
 
@@ -166,7 +164,7 @@ const byId = new Map();
 const lobbySubscribers = new Set();
 
 export function createRoom(host, { mode, pointLimit }) {
-	const id = mintRoomId();
+	const id = mintRoomId(byId);
 	const room = new Room({ id, host, mode, pointLimit });
 	byId.set(id, room);
 	room.broadcastState();
@@ -203,16 +201,6 @@ function sendLobbySnapshotTo(player) {
 
 function broadcastLobbyUpdate() {
 	for (const p of lobbySubscribers) sendLobbySnapshotTo(p);
-}
-
-function mintRoomId() {
-	for (let attempt = 0; attempt < 100; attempt++) {
-		const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-		const n   = NOUNS[Math.floor(Math.random() * NOUNS.length)];
-		const id = `${adj}-${n}-${Math.floor(Math.random() * 1000)}`;
-		if (!byId.has(id)) return id;
-	}
-	throw new Error('mintRoomId: failed to find a unique id');
 }
 
 // Test-only: reset everything between specs.
