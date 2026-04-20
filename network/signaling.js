@@ -1,7 +1,8 @@
 import { MSG, signalOffer, signalAnswer, signalIce } from './protocol.js';
 
-const PEER_TIMEOUT_MS = 10000;
+const PEER_TIMEOUT_MS = 15000;
 const PEER_ID_PREFIX = 'ah-';
+const PEER_DEBUG = typeof import.meta !== 'undefined' && import.meta.env?.DEV ? 2 : 0;
 
 /**
  * Server-relay signaling: uses an existing WebSocket (wrapped socket) to
@@ -74,23 +75,29 @@ function peerIdFor(roomCode) {
 export async function createPeerHost(roomCode) {
 	const { Peer } = await import('peerjs');
 	return new Promise((resolve, reject) => {
-		const peer = new Peer(peerIdFor(roomCode), { debug: 0 });
+		const peerId = peerIdFor(roomCode);
+		const peer = new Peer(peerId, { debug: PEER_DEBUG });
 		let connectionCb = null;
 		let settled = false;
+		console.log('[host] registering as', peerId);
 		const timer = setTimeout(() => {
 			if (settled) return;
 			settled = true;
 			peer.destroy();
 			reject(new Error('PeerJS signaling server timed out'));
 		}, PEER_TIMEOUT_MS);
-		peer.on('open', () => {
+		peer.on('open', (id) => {
 			if (settled) return;
 			settled = true;
 			clearTimeout(timer);
+			console.log('[host] registered, waiting for guest on', id);
 			peer.on('connection', conn => {
+				console.log('[host] guest connecting...');
 				conn.on('open', () => {
+					console.log('[host] data channel open');
 					connectionCb?.(new PeerJSTransport(conn));
 				});
+				conn.on('error', err => console.warn('[host] conn error', err));
 			});
 			resolve({
 				onConnection(cb) { connectionCb = cb; },
@@ -98,6 +105,7 @@ export async function createPeerHost(roomCode) {
 			});
 		});
 		peer.on('error', (err) => {
+			console.warn('[host] peer error', err);
 			if (settled) return;
 			settled = true;
 			clearTimeout(timer);
@@ -117,23 +125,28 @@ export async function createPeerHost(roomCode) {
 export async function createPeerGuest(roomCode) {
 	const { Peer } = await import('peerjs');
 	return new Promise((resolve, reject) => {
-		const peer = new Peer({ debug: 0 });
+		const targetId = peerIdFor(roomCode);
+		const peer = new Peer({ debug: PEER_DEBUG });
 		let settled = false;
+		console.log('[guest] connecting to', targetId);
 		const timer = setTimeout(() => {
 			if (settled) return;
 			settled = true;
 			peer.destroy();
 			reject(new Error('Connection to host timed out'));
 		}, PEER_TIMEOUT_MS);
-		peer.on('open', () => {
-			const conn = peer.connect(peerIdFor(roomCode), { reliable: true });
+		peer.on('open', (myId) => {
+			console.log('[guest] registered as', myId, '— connecting to', targetId);
+			const conn = peer.connect(targetId, { reliable: true });
 			conn.on('open', () => {
+				console.log('[guest] data channel open');
 				if (settled) return;
 				settled = true;
 				clearTimeout(timer);
 				resolve(new PeerJSTransport(conn));
 			});
 			conn.on('error', (err) => {
+				console.warn('[guest] conn error', err);
 				if (settled) return;
 				settled = true;
 				clearTimeout(timer);
@@ -142,6 +155,7 @@ export async function createPeerGuest(roomCode) {
 			});
 		});
 		peer.on('error', (err) => {
+			console.warn('[guest] peer error', err);
 			if (settled) return;
 			settled = true;
 			clearTimeout(timer);
