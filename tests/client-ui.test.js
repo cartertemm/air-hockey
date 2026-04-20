@@ -123,6 +123,128 @@ describe('renderScreen', () => {
 	});
 });
 
+describe('localHost screen', () => {
+	test('renders point limit form with Host and Cancel buttons', () => {
+		const root = setupRoot();
+		renderScreen(root, 'localHost', {
+			onSubmit: () => {},
+			onCancel: () => {},
+		});
+		expect(root.querySelector('h1').textContent).toBe('Host locally');
+		const radios = [...root.querySelectorAll('input[name=points]')];
+		expect(radios.map(r => r.value)).toEqual(['7', '11']);
+		expect(radios[0].checked).toBe(true);
+		const buttons = [...root.querySelectorAll('button')].map(b => b.textContent);
+		expect(buttons).toEqual(['Host', 'Cancel']);
+	});
+
+	test('submitting calls onSubmit with selected point limit', () => {
+		const root = setupRoot();
+		const calls = [];
+		renderScreen(root, 'localHost', {
+			onSubmit: (v) => calls.push(v),
+			onCancel: () => {},
+		});
+		root.querySelector('input[name=points][value="11"]').checked = true;
+		root.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+		expect(calls).toEqual([{ pointLimit: 11 }]);
+	});
+});
+
+describe('localWaiting screen', () => {
+	test('renders room code, invite link, copy button, waiting message, and cancel', () => {
+		const root = setupRoot();
+		renderScreen(root, 'localWaiting', {
+			roomCode: 'swift-otter-42',
+			inviteLink: 'http://localhost/#join=swift-otter-42',
+			onCancel: () => {},
+		});
+		expect(root.querySelector('h1').textContent).toBe('Local game');
+		expect(root.textContent).toContain('swift-otter-42');
+		expect(root.textContent).toContain('http://localhost/#join=swift-otter-42');
+		const buttons = [...root.querySelectorAll('button')].map(b => b.textContent);
+		expect(buttons).toContain('Copy link');
+		expect(buttons).toContain('Cancel');
+		expect(root.textContent).toContain('Waiting for opponent...');
+	});
+});
+
+describe('joining screen', () => {
+	test('renders joining message with room code and cancel button', () => {
+		const root = setupRoot();
+		renderScreen(root, 'joining', {
+			roomCode: 'brave-falcon-7',
+			onCancel: () => {},
+		});
+		expect(root.querySelector('h1').textContent).toBe('Joining game');
+		expect(root.textContent).toContain('brave-falcon-7');
+		const buttons = [...root.querySelectorAll('button')].map(b => b.textContent);
+		expect(buttons).toEqual(['Cancel']);
+	});
+});
+
+describe('mainMenu with local hosting', () => {
+	test('shows Host locally button when onHostLocal is provided', () => {
+		const root = setupRoot();
+		let hostClicked = false;
+		renderScreen(root, 'mainMenu', {
+			name: 'Swift Otter',
+			connected: false,
+			onHostLocal: () => { hostClicked = true; },
+			onConnect: () => {},
+			onTestSpeakers: () => {},
+			onSettings: () => {},
+		});
+		const hostBtn = [...root.querySelectorAll('button')].find(b => b.textContent === 'Host locally');
+		expect(hostBtn).toBeTruthy();
+		hostBtn.click();
+		expect(hostClicked).toBe(true);
+	});
+
+	test('Host locally is autofocused when present', () => {
+		const root = setupRoot();
+		renderScreen(root, 'mainMenu', {
+			name: 'Swift Otter',
+			connected: false,
+			onHostLocal: () => {},
+			onConnect: () => {},
+			onTestSpeakers: () => {},
+			onSettings: () => {},
+		});
+		expect(document.activeElement.textContent).toBe('Host locally');
+	});
+
+	test('shows status message when serverStatus is unreachable', () => {
+		const root = setupRoot();
+		renderScreen(root, 'mainMenu', {
+			name: 'Swift Otter',
+			connected: false,
+			serverStatus: 'unreachable',
+			onHostLocal: () => {},
+			onConnect: () => {},
+			onTestSpeakers: () => {},
+			onSettings: () => {},
+		});
+		const alert = root.querySelector('[role="alert"]');
+		expect(alert).toBeTruthy();
+		expect(alert.textContent).toMatch(/Server unreachable/);
+		expect(alert.getAttribute('aria-live')).toBe('assertive');
+	});
+
+	test('no status message when serverStatus is not unreachable', () => {
+		const root = setupRoot();
+		renderScreen(root, 'mainMenu', {
+			name: 'Swift Otter',
+			connected: false,
+			onHostLocal: () => {},
+			onConnect: () => {},
+			onTestSpeakers: () => {},
+			onSettings: () => {},
+		});
+		expect(root.querySelector('[role="alert"]')).toBeNull();
+	});
+});
+
 function defaultSettingsProps(overrides = {}) {
 	return {
 		name: 'Swift Otter',

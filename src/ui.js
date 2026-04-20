@@ -59,6 +59,9 @@ const SCREENS = {
 
 	mainMenu(root, props) {
 		const heading = el('h1', { text: `Welcome, ${props.name}` });
+		const status = props.serverStatus === 'unreachable'
+			? el('p', { role: 'alert', 'aria-live': 'assertive', text: 'Server unreachable — local hosting available' })
+			: null;
 		const buttons = props.connected
 			? [
 				el('button', { text: 'Create game',         onClick: props.onCreate,        autoFocus: true }),
@@ -68,11 +71,12 @@ const SCREENS = {
 				el('button', { text: 'Disconnect',          onClick: props.onDisconnect }),
 			]
 			: [
-				el('button', { text: 'Connect to server',   onClick: props.onConnect,       autoFocus: true }),
+				...(props.onHostLocal ? [el('button', { text: 'Host locally', onClick: props.onHostLocal, autoFocus: true })] : []),
+				el('button', { text: 'Connect to server', onClick: props.onConnect, autoFocus: !props.onHostLocal ? true : undefined }),
 				el('button', { text: 'Test speakers',       onClick: props.onTestSpeakers }),
 				el('button', { text: 'Configure settings', onClick: props.onSettings }),
 			];
-		mount(root, [heading, el('nav', {}, ...buttons)]);
+		mount(root, [heading, status, el('nav', {}, ...buttons)].filter(Boolean));
 	},
 
 	connecting(root, props) {
@@ -219,6 +223,55 @@ const SCREENS = {
 			// Caller can call dispose to remove this listener.
 			root.__keyHandler = onKey;
 		}
+	},
+
+	localHost(root, props) {
+		const form = el('form', {
+			onSubmit: (event) => {
+				event.preventDefault();
+				const pointLimit = parseInt(form.querySelector('input[name=points]:checked').value, 10);
+				props.onSubmit({ pointLimit });
+			},
+		},
+			el('h1', { text: 'Host locally' }),
+			el('fieldset', {},
+				el('legend', { text: 'Points to win' }),
+				el('label', {}, el('input', { type: 'radio', name: 'points', value: '7', checked: 'checked' }), ' 7'),
+				el('label', {}, el('input', { type: 'radio', name: 'points', value: '11' }), ' 11'),
+			),
+			el('button', { type: 'submit', text: 'Host', autoFocus: true }),
+			el('button', { type: 'button', text: 'Cancel', onClick: props.onCancel }),
+		);
+		mount(root, [form]);
+	},
+
+	localWaiting(root, props) {
+		const statusEl = el('p', { 'aria-live': 'polite', text: '' });
+		const copyButton = el('button', {
+			text: 'Copy link',
+			onClick: () => {
+				navigator.clipboard?.writeText(props.inviteLink).then(() => {
+					statusEl.textContent = 'Invite link copied to clipboard';
+				}).catch(() => {});
+			},
+		});
+		mount(root, [
+			el('h1', { text: 'Local game' }),
+			el('p', { text: `Room code: ${props.roomCode}` }),
+			el('p', { text: props.inviteLink }),
+			copyButton,
+			el('p', { role: 'status', 'aria-live': 'polite', text: 'Waiting for opponent...' }),
+			statusEl,
+			el('button', { text: 'Cancel', onClick: props.onCancel, autoFocus: true }),
+		]);
+	},
+
+	joining(root, props) {
+		mount(root, [
+			el('h1', { text: 'Joining game' }),
+			el('p', { 'aria-live': 'polite', text: `Joining game ${props.roomCode}...` }),
+			el('button', { text: 'Cancel', onClick: props.onCancel, autoFocus: true }),
+		]);
 	},
 
 	testSpeakers(root, props) {

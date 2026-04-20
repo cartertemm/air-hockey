@@ -77,6 +77,7 @@ async function flushAsyncWork() {
 beforeEach(() => {
 	document.body.innerHTML = '';
 	clearIdentity();
+	window.location.hash = '';
 });
 
 describe('session: iOS install prompt', () => {
@@ -169,7 +170,8 @@ describe('session: first load', () => {
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		expect(root.querySelector('h1').textContent).toBe('Welcome, Swift Otter');
 		const labels = [...root.querySelectorAll('button')].map(b => b.textContent);
-		expect(labels[0]).toBe('Connect to server');
+		expect(labels).toContain('Host locally');
+		expect(labels).toContain('Connect to server');
 	});
 
 	test('no net-client is created until the user clicks Connect', () => {
@@ -207,7 +209,7 @@ describe('session: connect flow', () => {
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
-		root.querySelector('button').click(); // Connect to server
+		clickText(root, 'Connect to server');
 		expect(root.querySelector('h1').textContent).toBe('Connecting');
 	});
 
@@ -216,7 +218,7 @@ describe('session: connect flow', () => {
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
-		root.querySelector('button').click(); // Connect
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		// onOpen has fired, which sends hello. Now simulate welcome.
 		factory.fireMessage({
@@ -234,7 +236,7 @@ describe('session: connect flow', () => {
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
-		root.querySelector('button').click();
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		factory.fireClose({});
 		expect(root.querySelector('h1').textContent).toBe('Connection failed');
@@ -245,7 +247,7 @@ describe('session: connect flow', () => {
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
-		root.querySelector('button').click(); // Connect
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		factory.fireMessage({
 			type: MSG.WELCOME,
@@ -265,7 +267,7 @@ describe('session: connect flow', () => {
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
-		root.querySelector('button').click(); // Connect
+		clickText(root, 'Connect to server');
 		// Cancel is autofocused; click the first button.
 		root.querySelector('button').click();
 		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
@@ -279,7 +281,7 @@ describe('session: async close timing (regression)', () => {
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		const factory = makeAsyncFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
-		root.querySelector('button').click(); // Connect
+		clickText(root, 'Connect to server');
 		await Promise.resolve(); // let onOpen drain
 		factory.fireMessage({
 			type: MSG.WELCOME,
@@ -292,7 +294,8 @@ describe('session: async close timing (regression)', () => {
 		await Promise.resolve();
 		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
 		const labels = [...root.querySelectorAll('button')].map(b => b.textContent);
-		expect(labels[0]).toBe('Connect to server');
+		expect(labels).toContain('Host locally');
+		expect(labels).toContain('Connect to server');
 		expect(factory.client.closeCalled).toBe(true);
 	});
 
@@ -301,7 +304,7 @@ describe('session: async close timing (regression)', () => {
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		const factory = makeAsyncFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
-		root.querySelector('button').click(); // Connect
+		clickText(root, 'Connect to server');
 		// Cancel is autofocused first button on the connecting screen
 		root.querySelector('button').click();
 		await Promise.resolve();
@@ -361,7 +364,7 @@ describe('session: Escape goes back', () => {
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
-		root.querySelector('button').click(); // Connect
+		clickText(root, 'Connect to server');
 		expect(root.querySelector('h1').textContent).toBe('Connecting');
 		dispatchEscape(root);
 		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
@@ -373,7 +376,7 @@ describe('session: Escape goes back', () => {
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
-		root.querySelector('button').click(); // Connect
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		factory.fireClose({});
 		expect(root.querySelector('h1').textContent).toBe('Connection failed');
@@ -568,7 +571,7 @@ async function openOnlineMenu({ isIOS = () => false, name = 'A', clientId = 'c1'
 	setIdentityFromWelcome({ clientId: null, sessionToken: null, name });
 	const factory = makeFakeClient();
 	startSession({ root, createClient: factory, isIOS });
-	root.querySelector('button').click(); // Connect
+	clickText(root, 'Connect to server');
 	await Promise.resolve();
 	factory.fireMessage({
 		type: MSG.WELCOME,
@@ -841,7 +844,7 @@ describe('session: handoff and countdown', () => {
 				preloadGameAudio: async () => {},
 			}),
 		});
-		root.querySelector('button').click();
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		factory.fireMessage({
 			type: MSG.WELCOME,
@@ -876,7 +879,7 @@ describe('session: handoff and countdown', () => {
 			isIOS: () => false,
 			loadGameplay: () => preload.promise,
 		});
-		root.querySelector('button').click();
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		factory.fireMessage({
 			type: MSG.WELCOME,
@@ -941,7 +944,7 @@ describe('session: handoff and countdown', () => {
 			isIOS: () => false,
 			loadGameplay: () => preload.promise,
 		});
-		root.querySelector('button').click();
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		factory.fireMessage({
 			type: MSG.WELCOME,
@@ -993,7 +996,7 @@ describe('session: handoff and countdown', () => {
 				preloadGameAudio: async () => {},
 			}),
 		});
-		root.querySelector('button').click();
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		factory.fireMessage({
 			type: MSG.WELCOME,
@@ -1063,7 +1066,7 @@ describe('session: handoff and countdown', () => {
 				};
 			},
 		});
-		root.querySelector('button').click();
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		factory.fireMessage({
 			type: MSG.WELCOME,
@@ -1144,7 +1147,7 @@ describe('session: handoff and countdown', () => {
 				preloadGameAudio: async () => {},
 			}),
 		});
-		root.querySelector('button').click();
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		factory.fireMessage({
 			type: MSG.WELCOME,
@@ -1186,7 +1189,7 @@ describe('session: handoff and countdown', () => {
 				preloadGameAudio: async () => {},
 			}),
 		});
-		root.querySelector('button').click();
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		factory.fireMessage({
 			type: MSG.WELCOME,
@@ -1216,7 +1219,7 @@ describe('session: disconnect', () => {
 		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
-		root.querySelector('button').click(); // Connect
+		clickText(root, 'Connect to server');
 		await Promise.resolve();
 		factory.fireMessage({
 			type: MSG.WELCOME,
@@ -1227,6 +1230,149 @@ describe('session: disconnect', () => {
 		expect(factory.client.closeCalled).toBe(true);
 		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
 		const labels = [...root.querySelectorAll('button')].map(b => b.textContent);
-		expect(labels[0]).toBe('Connect to server');
+		expect(labels).toContain('Host locally');
+		expect(labels).toContain('Connect to server');
+	});
+});
+
+describe('session: local hosting', () => {
+	test('Host locally button opens the local host form', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		clickText(root, 'Host locally');
+		expect(root.querySelector('h1').textContent).toBe('Host locally');
+	});
+
+	test('submitting local host form creates local host and shows waiting screen', async () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		const fakeHandle = {
+			hostTransport: { send() {}, onMessage() {}, close() {} },
+			roomCode: 'test-room-1',
+			connectGuest: () => {},
+			dispose: () => {},
+		};
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => false,
+			createLocalHost: () => fakeHandle,
+		});
+		clickText(root, 'Host locally');
+		clickText(root, 'Host');
+		await flushAsyncWork();
+		expect(root.querySelector('h1').textContent).toBe('Local game');
+		expect(root.textContent).toContain('test-room-1');
+	});
+
+	test('cancel from local waiting disposes the host and returns to menu', async () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		let disposed = false;
+		const fakeHandle = {
+			hostTransport: { send() {}, onMessage() {}, close() {} },
+			roomCode: 'test-room-2',
+			connectGuest: () => {},
+			dispose: () => { disposed = true; },
+		};
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => false,
+			createLocalHost: () => fakeHandle,
+		});
+		clickText(root, 'Host locally');
+		clickText(root, 'Host');
+		await flushAsyncWork();
+		expect(root.querySelector('h1').textContent).toBe('Local game');
+		clickText(root, 'Cancel');
+		expect(disposed).toBe(true);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('Escape from local host form returns to menu', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		clickText(root, 'Host locally');
+		expect(root.querySelector('h1').textContent).toBe('Host locally');
+		dispatchEscape(root);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('Escape from local waiting cancels and returns to menu', async () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		let disposed = false;
+		const fakeHandle = {
+			hostTransport: { send() {}, onMessage() {}, close() {} },
+			roomCode: 'test-room-3',
+			connectGuest: () => {},
+			dispose: () => { disposed = true; },
+		};
+		startSession({
+			root,
+			createClient: makeFakeClient(),
+			isIOS: () => false,
+			createLocalHost: () => fakeHandle,
+		});
+		clickText(root, 'Host locally');
+		clickText(root, 'Host');
+		await flushAsyncWork();
+		dispatchEscape(root);
+		expect(disposed).toBe(true);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+});
+
+describe('session: hash routing', () => {
+	test('boot with #join=CODE skips to joining screen', () => {
+		window.location.hash = '#join=brave-falcon-7';
+		const root = setupRoot();
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		expect(root.querySelector('h1').textContent).toBe('Joining game');
+		expect(root.textContent).toContain('brave-falcon-7');
+		expect(window.location.hash).toBe('');
+	});
+
+	test('boot with #join=CODE generates name if none stored', () => {
+		window.location.hash = '#join=test-room-1';
+		const root = setupRoot();
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		expect(root.querySelector('h1').textContent).toBe('Joining game');
+		const { name } = getIdentity();
+		expect(name).toBeTruthy();
+		expect(name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+	});
+
+	test('cancel from joining screen returns to menu', () => {
+		window.location.hash = '#join=brave-falcon-7';
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		expect(root.querySelector('h1').textContent).toBe('Joining game');
+		clickText(root, 'Cancel');
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+
+	test('Escape from joining screen returns to menu', () => {
+		window.location.hash = '#join=brave-falcon-7';
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		expect(root.querySelector('h1').textContent).toBe('Joining game');
+		dispatchEscape(root);
+		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
+	});
+});
+
+describe('session: offline menu shows Host locally', () => {
+	test('offline menu always shows Host locally button', () => {
+		const root = setupRoot();
+		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
+		const labels = [...root.querySelectorAll('button')].map(b => b.textContent);
+		expect(labels).toContain('Host locally');
 	});
 });

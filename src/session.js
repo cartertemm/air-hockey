@@ -69,6 +69,7 @@ export function startSession({
 	isIOS = isIOSPlatform,
 	isIOSStandalone = isIOSStandaloneDefault,
 	loadGameplay = loadGameBundle,
+	createLocalHost: createLocalHostOverride,
 } = {}) {
 	let state = null;
 	let currentScreen = null;
@@ -121,13 +122,15 @@ export function startSession({
 		};
 	}
 
-	function screenOfflineMenu() {
+	function screenOfflineMenu(serverStatus) {
 		const { name } = getIdentity();
 		return {
 			screen: 'mainMenu',
 			props: {
 				name,
 				connected: false,
+				serverStatus,
+				onHostLocal:     () => go(screenLocalHost()),
 				onConnect:       () => go(screenConnecting()),
 				onTestSpeakers:  () => go(screenTestSpeakers(false)),
 				onSettings:      () => go(screenSettings(false)),
@@ -178,6 +181,110 @@ export function startSession({
 					return true;
 				}
 				return false;
+			},
+		};
+	}
+
+	function screenLocalHost() {
+		const cancel = () => go(screenOfflineMenu());
+		return {
+			screen: 'localHost',
+			props: {
+				onSubmit: async ({ pointLimit }) => {
+					const mod = createLocalHostOverride
+						? { createLocalHost: createLocalHostOverride }
+						: await import('../game/localHost.js');
+					const handle = mod.createLocalHost({ pointLimit });
+					go(screenLocalWaiting(handle));
+				},
+				onCancel: cancel,
+			},
+			onEscape: cancel,
+		};
+	}
+
+	function screenLocalWaiting(handle) {
+		const inviteLink = `${window.location.origin}${window.location.pathname}#join=${handle.roomCode}`;
+		const cancel = () => {
+			handle.dispose();
+			go(screenOfflineMenu());
+		};
+		return {
+			screen: 'localWaiting',
+			props: {
+				roomCode: handle.roomCode,
+				inviteLink,
+				onCancel: cancel,
+			},
+			onEscape: cancel,
+			onDispose: () => {},
+		};
+	}
+
+	function screenJoining(roomCode) {
+		const cancel = () => {
+			window.location.hash = '';
+			go(screenOfflineMenu());
+		};
+		return {
+			screen: 'joining',
+			props: {
+				roomCode,
+				onCancel: cancel,
+			},
+			onEscape: cancel,
+		};
+	}
+
+	function screenLocalGameplay(transport) {
+		let game = null;
+		let audio = null;
+		let disposed = false;
+		let gameplayReady = false;
+		let frameHandle = 0;
+		let lastFrameTime = 0;
+		const pendingMessages = [];
+		function step(now) {
+			if (disposed) return;
+			if (game) {
+				const dt = lastFrameTime === 0 ? 1 / 60 : Math.min((now - lastFrameTime) / 1000, 0.05);
+				game.tick?.(dt);
+				game.client.flushPending?.();
+			}
+			lastFrameTime = now;
+			frameHandle = requestAnimationFrame(step);
+		}
+		(async () => {
+			const { Game, createGameAudio } = await prepareGameplay();
+			if (disposed) return;
+			initTouch({ target: document.body });
+			game = new Game({ socket: transport });
+			frameHandle = requestAnimationFrame(step);
+			audio = createGameAudio();
+			if (disposed) {
+				audio.dispose();
+				return;
+			}
+			audio.attach(game);
+			gameplayReady = true;
+			for (const msg of pendingMessages.splice(0)) {
+				game.client.handleMessage(msg);
+			}
+		})();
+		transport.onMessage((msg) => {
+			if (game && gameplayReady) game.client.handleMessage(msg);
+			else pendingMessages.push(msg);
+		});
+		return {
+			screen: 'gameplay',
+			props: {},
+			onDispose: () => {
+				disposed = true;
+				if (frameHandle) cancelAnimationFrame(frameHandle);
+				game?.dispose?.();
+				disposeTouch();
+				audio?.dispose();
+				transport.close?.();
 			},
 		};
 	}
@@ -536,12 +643,24 @@ export function startSession({
 		event.preventDefault();
 		state.onEscape();
 	});
-	const { name } = getIdentity();
-	if (isIOS() && !isIOSStandalone() && !settings.get('pwaPromptDismissed', false)) {
-		go(screenInstallPwaIos());
-	} else if (!name) {
-		go(screenNameEntry());
+	// Hash routing: #join=<ROOM_CODE> skips menus and goes to joining screen
+	const hashMatch = window.location.hash.match(/^#join=(.+)$/);
+	if (hashMatch) {
+		const roomCode = decodeURIComponent(hashMatch[1]);
+		window.location.hash = '';
+		const { name: storedName } = getIdentity();
+		if (!storedName) {
+			setDisplayName(generateName());
+		}
+		go(screenJoining(roomCode));
 	} else {
-		go(screenOfflineMenu());
+		const { name } = getIdentity();
+		if (isIOS() && !isIOSStandalone() && !settings.get('pwaPromptDismissed', false)) {
+			go(screenInstallPwaIos());
+		} else if (!name) {
+			go(screenNameEntry());
+		} else {
+			go(screenOfflineMenu());
+		}
 	}
 }
