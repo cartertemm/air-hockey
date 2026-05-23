@@ -1,7 +1,7 @@
 import { sfx } from '../sfx.js';
 import { malletHitTier, wallBounceTier, goalTier } from './tiers.js';
 import { speak } from '../speech.js';
-import { TABLE_WIDTH, TABLE_LENGTH } from '../physics.js';
+import { TABLE_WIDTH, TABLE_LENGTH, MALLET_RADIUS } from '../physics.js';
 
 const defaultSounds = {
 	tableLoop:          sfx(() => import('../../sounds/table_loop.ogg?url')),
@@ -20,6 +20,7 @@ const defaultSounds = {
 	goal5:              sfx(() => import('../../sounds/goal_5.ogg?url')),
 	offTable:           sfx(() => import('../../sounds/puck_off_table.ogg?url')),
 	placePuck:          sfx(() => import('../../sounds/place_puck.ogg?url')),
+	malletBorder:       sfx(() => import('../../sounds/mallet_border.ogg?url')),
 };
 
 const TABLE_LOOP_START_PITCH = 0.5;
@@ -42,6 +43,7 @@ const VOL = {
 	goal5: 0.8,
 	offTable: 0.9,
 	placePuck: 0.8,
+	malletBorder: 1.0,
 };
 
 // Listener sits at the local player's goal end. Linear falloff with a 0.3 floor
@@ -60,6 +62,12 @@ function distanceVolume(localPlayer, y) {
 	return 1 - DISTANCE_FALLOFF * norm;
 }
 
+function malletAtBorder(mallet, player) {
+	if (!mallet?.onTable) return false;
+	if (mallet.x <= MALLET_RADIUS || mallet.x >= TABLE_WIDTH - MALLET_RADIUS) return true;
+	return player === 'p1' ? mallet.y <= MALLET_RADIUS : mallet.y >= TABLE_LENGTH - MALLET_RADIUS;
+}
+
 export async function preloadGameAudio() {
 	await Promise.all(Object.values(defaultSounds).map(s => s.load()));
 }
@@ -72,6 +80,7 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 	// if the loop is killed (MATCH_END, externally) and comes back later,
 	// it resumes at normal pitch.
 	let tableLoopHasRamped = false;
+	let malletBorderState = { p1: false, p2: false };
 
 	function isActivePlay(state) {
 		return state === 'SERVE' || state === 'PLAYING' || state === 'PAUSED';
@@ -196,6 +205,18 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 		if (snapshot.state === 'MATCH_END' && sounds.tableLoop.isLooping()) {
 			sounds.tableLoop.stop();
 		}
+		if (isActivePlay(snapshot.state)) {
+			for (const player of ['p1', 'p2']) {
+				const atBorder = malletAtBorder(snapshot.mallets?.[player], player);
+				if (atBorder && !malletBorderState[player]) {
+					sounds.malletBorder.play({ volume: VOL.malletBorder });
+				}
+				malletBorderState[player] = atBorder;
+			}
+		} else {
+			malletBorderState.p1 = false;
+			malletBorderState.p2 = false;
+		}
 	}
 
 	return {
@@ -203,6 +224,7 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 			detachListeners();
 			active = true;
 			localPlayer = game.localPlayer ?? 'p1';
+			malletBorderState = { p1: false, p2: false };
 			const offGameStart = game.on('gameStart', (msg) => {
 				if (!active) return;
 				localPlayer = msg.localPlayer;

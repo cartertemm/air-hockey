@@ -58,6 +58,7 @@ function makeSounds() {
 		goal5: fakeSfx(),
 		offTable: fakeSfx(),
 		placePuck: fakeSfx(),
+		malletBorder: fakeSfx(),
 	};
 }
 
