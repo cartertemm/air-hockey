@@ -450,6 +450,12 @@ describe('game audio gameplay announcements', () => {
 		expect(document.getElementById('sr-assertive').textContent).toBe('Opponent wins game. 0 to 1.');
 	});
 
+	test('match:end won by local player speaks "You win."', async () => {
+		const { game } = await setup('p2');
+		game.emit('event', { type: 'match:end', winner: 'p2' });
+		expect(document.getElementById('sr-assertive').textContent).toBe('You win.');
+	});
+
 	test('forfeit:confirmed speaks "You forfeit." when the local player forfeited', async () => {
 		const { game } = await setup('p1');
 		game.emit('event', { type: 'forfeit:confirmed', player: 'p1' });
