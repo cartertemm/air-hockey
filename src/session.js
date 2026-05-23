@@ -5,6 +5,7 @@ import { createClient as realCreateClient } from './net/client.js';
 import { isIOS as isIOSPlatform, isIOSStandalone as isIOSStandaloneDefault } from './platform.js';
 import * as settings from './settings.js';
 import { initTouch, disposeTouch } from './input/touch.js';
+import { initMouse, disposeMouse } from './input/mouse.js';
 import {
 	initSpeech,
 	speak,
@@ -326,6 +327,7 @@ export function startSession({
 			// document.body so touches across the full viewport are captured —
 			// the gameplay region inside `root` is empty and collapses to 0px.
 			initTouch({ target: document.body });
+			initMouse();
 			game = new Game({ socket: client });
 			frameHandle = requestAnimationFrame(step);
 			audio = createGameAudio();
@@ -347,6 +349,7 @@ export function startSession({
 				if (frameHandle) cancelAnimationFrame(frameHandle);
 				game?.dispose?.();
 				disposeTouch();
+				disposeMouse();
 				audio?.dispose();
 			},
 			onMessage: (msg) => {

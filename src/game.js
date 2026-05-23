@@ -6,6 +6,7 @@ import {
 	MALLET_RADIUS,
 } from './physics.js';
 import { on as onTouch, off as offTouch, fingerCount } from './input/touch.js';
+import { on as onMouse, off as offMouse } from './input/mouse.js';
 import { InputHandler } from './input/inputHandler.js';
 import { pauseToggleMsg } from '../network/protocol.js';
 import { speak } from './speech.js';
@@ -42,6 +43,7 @@ export class Game {
 		this._fingerId = null;
 		this._local = { x: TABLE_WIDTH / 2, y: 12, onTable: false };
 		this._touchHandlers = [];
+		this._mouseHandlers = [];
 		this._wireClient();
 		this._wireInput();
 	}
@@ -99,6 +101,28 @@ export class Game {
 		onTouch('touchmove', onMove);
 		onTouch('touchend', onEnd);
 		this._touchHandlers.push(['touchstart', onStart], ['touchmove', onMove], ['touchend', onEnd]);
+		let mouseLatch = false;
+		const onMouseDown = ({ x, y }) => {
+			mouseLatch = true;
+			this._applyTouch(x, y);
+			this._local.onTable = true;
+			this._sendCurrent();
+		};
+		const onMouseMove = ({ x, y }) => {
+			if (!mouseLatch) return;
+			this._applyTouch(x, y);
+			this._sendCurrent();
+		};
+		const onMouseUp = () => {
+			if (!mouseLatch) return;
+			mouseLatch = false;
+			if (!this._keyboardLatch) this._local.onTable = false;
+			this._sendCurrent();
+		};
+		onMouse('mousedown', onMouseDown);
+		onMouse('mousemove', onMouseMove);
+		onMouse('mouseup', onMouseUp);
+		this._mouseHandlers.push(['mousedown', onMouseDown], ['mousemove', onMouseMove], ['mouseup', onMouseUp]);
 		const ih = this.input;
 		ih.bind('moveLeft', { hold: ['arrowleft'] });
 		ih.bind('moveRight', { hold: ['arrowright'] });
@@ -178,5 +202,9 @@ export class Game {
 			offTouch(eventName, handler);
 		}
 		this._touchHandlers = [];
+		for (const [eventName, handler] of this._mouseHandlers) {
+			offMouse(eventName, handler);
+		}
+		this._mouseHandlers = [];
 	}
 }

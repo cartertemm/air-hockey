@@ -1,12 +1,17 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { Game, screenToTable } from '../src/game.js';
 import { initKeyboard } from '../src/input/keyboard.js';
+import { initMouse, disposeMouse } from '../src/input/mouse.js';
 import { MSG } from '../network/protocol.js';
 import { TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
 
 function makeFakeSocket() {
 	const sent = [];
 	return { sent, send(msg) { sent.push(msg); } };
+}
+
+function dispatchMouse(type, x, y, button = 0) {
+	window.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, button, bubbles: true }));
 }
 
 function dispatchKey(type, key) {
@@ -118,5 +123,65 @@ describe('Game input → socket integration', () => {
 		// Both axes should move toward p2's near side: x decreases, y decreases.
 		expect(game._local.x).toBeLessThan(startX);
 		expect(game._local.y).toBeLessThan(startY);
+	});
+});
+
+describe('Game mouse/touchpad input → socket integration', () => {
+	beforeEach(() => { initMouse(); });
+	afterEach(() => { disposeMouse(); });
+
+	test('mousedown sends INPUT with onTable=true', () => {
+		const socket = makeFakeSocket();
+		const game = new Game({ socket });
+		game.client.handleMessage({ type: MSG.GAME_START, localPlayer: 'p1', pointLimit: 7 });
+		dispatchMouse('mousedown', 200, 300);
+		const inputs = socket.sent.filter(m => m.type === MSG.INPUT);
+		expect(inputs.length).toBeGreaterThan(0);
+		expect(inputs[0].onTable).toBe(true);
+		game.dispose();
+	});
+
+	test('mousemove while button held updates mallet position', () => {
+		const socket = makeFakeSocket();
+		const game = new Game({ socket });
+		game.client.handleMessage({ type: MSG.GAME_START, localPlayer: 'p1', pointLimit: 7 });
+		dispatchMouse('mousedown', 200, 300);
+		const x0 = game._local.x;
+		dispatchMouse('mousemove', 600, 200);
+		game.client.flushPending();
+		expect(game._local.x).not.toBe(x0);
+		game.dispose();
+	});
+
+	test('mousemove while button not held does not move mallet', () => {
+		const socket = makeFakeSocket();
+		const game = new Game({ socket });
+		game.client.handleMessage({ type: MSG.GAME_START, localPlayer: 'p1', pointLimit: 7 });
+		const x0 = game._local.x;
+		const y0 = game._local.y;
+		dispatchMouse('mousemove', 600, 200);
+		expect(game._local.x).toBe(x0);
+		expect(game._local.y).toBe(y0);
+		game.dispose();
+	});
+
+	test('mouseup lifts mallet off table', () => {
+		const socket = makeFakeSocket();
+		const game = new Game({ socket });
+		game.client.handleMessage({ type: MSG.GAME_START, localPlayer: 'p1', pointLimit: 7 });
+		dispatchMouse('mousedown', 200, 300);
+		expect(game._local.onTable).toBe(true);
+		dispatchMouse('mouseup', 200, 300);
+		expect(game._local.onTable).toBe(false);
+		game.dispose();
+	});
+
+	test('right mouse button does not latch mallet', () => {
+		const socket = makeFakeSocket();
+		const game = new Game({ socket });
+		game.client.handleMessage({ type: MSG.GAME_START, localPlayer: 'p1', pointLimit: 7 });
+		dispatchMouse('mousedown', 200, 300, 2);
+		expect(game._local.onTable).toBe(false);
+		game.dispose();
 	});
 });
