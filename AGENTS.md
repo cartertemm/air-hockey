@@ -1,0 +1,1 @@
+Read and follow instructions from @CLAUDE.md.
