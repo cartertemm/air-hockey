@@ -22,9 +22,10 @@ function randomDrift() {
 }
 
 export class GameSession {
-	constructor({ p1, p2, pointLimit = 7, onEnd = null }) {
+	constructor({ p1, p2, pointLimit = 7, bestOf = 1, onEnd = null }) {
 		this.players = { p1, p2 };
 		this.pointLimit = pointLimit;
+		this.bestOf = bestOf;
 		this.onEnd = onEnd;
 		this.physicsState = {
 			puck: createPuck(),
@@ -37,7 +38,7 @@ export class GameSession {
 		};
 		this.tickCount = 0;
 		this.emitter = new EventEmitter();
-		this.stateMachine = new GameStateMachine({ pointLimit: this.pointLimit }, this.emitter);
+		this.stateMachine = new GameStateMachine({ pointLimit: this.pointLimit, bestOf: this.bestOf }, this.emitter);
 		this.pendingEvents = [];
 		this.firstServer = null;
 		this.simNow = 0;

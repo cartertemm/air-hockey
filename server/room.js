@@ -125,10 +125,12 @@ export class Room {
 
 	startGame() {
 		const [host, guest] = this.members;
+		const bestOf = this.mode === 'bestOf3' ? 3 : 1;
 		this.game = new GameSession({
 			p1: host,
 			p2: guest,
 			pointLimit: this.pointLimit,
+			bestOf,
 			onEnd: ({ winner, finalScore }) => this._finishGame({ winner, finalScore }),
 		});
 		this.phase = 'playing';
