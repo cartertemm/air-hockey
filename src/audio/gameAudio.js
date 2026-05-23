@@ -130,7 +130,7 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 				}
 				break;
 			case 'match:end':
-				if (event.winner) speak(`${event.winner} wins.`, true);
+				if (event.winner) speak(event.winner === localPlayer ? 'You win.' : 'Opponent wins.', true);
 				break;
 			case 'game:end': {
 				if (!event.winner) break;
