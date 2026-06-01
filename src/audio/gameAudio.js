@@ -1,4 +1,5 @@
 import { sfx } from '../sfx.js';
+import { createPositionTone } from './positionTone.js';
 import { malletHitTier, wallBounceTier, goalTier } from './tiers.js';
 import { speak } from '../speech.js';
 import { TABLE_WIDTH, TABLE_LENGTH, MALLET_RADIUS } from '../physics.js';
@@ -6,7 +7,6 @@ import { TABLE_WIDTH, TABLE_LENGTH, MALLET_RADIUS } from '../physics.js';
 const defaultSounds = {
 	tableLoop:          sfx(() => import('../../sounds/table_loop.ogg?url')),
 	puckLoop:           sfx(() => import('../../sounds/puck_loop.ogg?url')),
-	malletLoop:         sfx(() => import('../../sounds/mallet_loop.ogg?url')),
 	opponentMalletLoop: sfx(() => import('../../sounds/opponent_mallet_loop.ogg?url')),
 	hitPuck1:           sfx(() => import('../../sounds/hit_puck1.ogg?url')),
 	hitPuck2:           sfx(() => import('../../sounds/hit_puck2.ogg?url')),
@@ -26,10 +26,17 @@ const defaultSounds = {
 const TABLE_LOOP_START_PITCH = 0.5;
 const TABLE_LOOP_RAMP_MS = 1000;
 
+// The local player's position is conveyed by a quiet looping tone. Pitch
+// encodes where the mallet sits relative to the puck along the forward axis
+// (toward the opponent's goal): behind the puck drops the pitch, in front
+// raises it. Frequency scales exponentially for an even perceptual spread.
+const TONE_BASE_FREQ = 330;
+const TONE_OCTAVES = 1;
+const TONE_VOLUME = 0.08;
+
 const VOL = {
 	tableLoop: 0.35,
 	puckLoop: 0.6,
-	malletLoop: 0.5,
 	opponentMalletLoop: 0.5,
 	hitPuck1: 1.0,
 	hitPuck2: 0.85,
@@ -62,6 +69,15 @@ function distanceVolume(localPlayer, y) {
 	return 1 - DISTANCE_FALLOFF * norm;
 }
 
+function toneFrequency(localPlayer, malletY, puck) {
+	if (typeof malletY !== 'number' || !puck?.onTable || typeof puck.y !== 'number') {
+		return TONE_BASE_FREQ;
+	}
+	const forward = localPlayer === 'p1' ? malletY - puck.y : puck.y - malletY;
+	const norm = Math.max(-1, Math.min(1, forward / TABLE_LENGTH));
+	return TONE_BASE_FREQ * Math.pow(2, norm * TONE_OCTAVES);
+}
+
 function malletAtBorder(mallet, player) {
 	if (!mallet?.onTable) return false;
 	if (mallet.x <= MALLET_RADIUS || mallet.x >= TABLE_WIDTH - MALLET_RADIUS) return true;
@@ -72,7 +88,7 @@ export async function preloadGameAudio() {
 	await Promise.all(Object.values(defaultSounds).map(s => s.load()));
 }
 
-export function createGameAudio({ sounds = defaultSounds } = {}) {
+export function createGameAudio({ sounds = defaultSounds, tone = createPositionTone() } = {}) {
 	let localPlayer = 'p1';
 	let active = false;
 	let detachListeners = () => {};
@@ -179,15 +195,15 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 		}
 		const localMallet = snapshot.mallets?.[localPlayer];
 		if (isActivePlay(snapshot.state) && localMallet?.onTable) {
-			const vol = VOL.malletLoop * distanceVolume(localPlayer, localMallet.y);
 			const pan = panFor(localPlayer, localMallet.x);
-			if (!sounds.malletLoop.isLooping()) {
-				sounds.malletLoop.play({ loop: 'infinite', volume: vol, pan });
+			const frequency = toneFrequency(localPlayer, localMallet.y, snapshot.puck);
+			if (!tone.isPlaying()) {
+				tone.play({ frequency, pan, volume: TONE_VOLUME });
 			} else {
-				sounds.malletLoop.update({ pan, volume: vol });
+				tone.update({ frequency, pan });
 			}
-		} else if (sounds.malletLoop.isLooping()) {
-			sounds.malletLoop.stop();
+		} else if (tone.isPlaying()) {
+			tone.stop();
 		}
 		const opponent = localPlayer === 'p1' ? 'p2' : 'p1';
 		const opponentMallet = snapshot.mallets?.[opponent];
@@ -251,7 +267,7 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 			detachListeners();
 			sounds.tableLoop.stop();
 			sounds.puckLoop.stop();
-			sounds.malletLoop.stop();
+			tone.stop();
 			sounds.opponentMalletLoop.stop();
 		},
 	};
