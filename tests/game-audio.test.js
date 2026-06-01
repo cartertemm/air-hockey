@@ -168,7 +168,7 @@ describe('game audio loops', () => {
 			mallets: { p1: { x: 24, y: 12, onTable: true }, p2: { x: 30, y: 84, onTable: true } },
 		});
 		expect(tone.play).toHaveBeenCalledTimes(1);
-		expect(tone.play).toHaveBeenCalledWith(expect.objectContaining({ volume: 0.08 }));
+		expect(tone.play).toHaveBeenCalledWith(expect.objectContaining({ volume: 0.08, danger: false }));
 		expect(tone.play.mock.calls[0][0].frequency).toBeCloseTo(330 * Math.pow(2, -36 / 96), 3);
 		expect(tone.play.mock.calls[0][0].frequency).toBeLessThan(330);
 		// Mallet in front of the puck (y=60 > puck y=48): higher than the base pitch.
@@ -181,6 +181,7 @@ describe('game audio loops', () => {
 		expect(tone.update).toHaveBeenCalledTimes(1);
 		expect(tone.update.mock.calls[0][0].frequency).toBeCloseTo(330 * Math.pow(2, 12 / 96), 3);
 		expect(tone.update.mock.calls[0][0].frequency).toBeGreaterThan(330);
+		expect(tone.update.mock.calls[0][0].danger).toBe(true);
 		game.emit('snapshot', {
 			state: 'PLAYING',
 			puck: { onTable: true, x: 24, y: 48 },
@@ -216,6 +217,37 @@ describe('game audio loops', () => {
 		});
 		expect(tone.play.mock.calls[0][0].frequency).toBeCloseTo(330 * Math.pow(2, 18 / 96), 3);
 		expect(tone.play.mock.calls[0][0].frequency).toBeGreaterThan(330);
+		expect(tone.play.mock.calls[0][0].danger).toBe(true);
+	});
+
+	test('position tone flags danger only while the puck is behind the mallet', () => {
+		const sounds = makeSounds();
+		const tone = fakeTone();
+		const audio = createGameAudio({ sounds, tone });
+		const game = createFakeGame();
+		audio.attach(game);
+		game.emit('gameStart', { localPlayer: 'p1', pointLimit: 7 });
+		// Puck in front of the mallet (y=48 > mallet y=20): safe.
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24, y: 48 },
+			mallets: { p1: { x: 24, y: 20, onTable: true }, p2: { x: 30, y: 84, onTable: true } },
+		});
+		expect(tone.play.mock.calls[0][0].danger).toBe(false);
+		// Puck slips behind the mallet (y=10 < mallet y=20): danger toggles on.
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24, y: 10 },
+			mallets: { p1: { x: 24, y: 20, onTable: true }, p2: { x: 30, y: 84, onTable: true } },
+		});
+		expect(tone.update.mock.calls.at(-1)[0].danger).toBe(true);
+		// Puck back in front: danger clears.
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24, y: 48 },
+			mallets: { p1: { x: 24, y: 20, onTable: true }, p2: { x: 30, y: 84, onTable: true } },
+		});
+		expect(tone.update.mock.calls.at(-1)[0].danger).toBe(false);
 	});
 
 	test('opponent mallet loop tracks the non-local mallet and stops when off-table', () => {

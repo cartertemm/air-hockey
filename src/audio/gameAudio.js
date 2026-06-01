@@ -30,6 +30,9 @@ const TABLE_LOOP_RAMP_MS = 1000;
 // encodes where the mallet sits relative to the puck along the forward axis
 // (toward the opponent's goal): behind the puck drops the pitch, in front
 // raises it. Frequency scales exponentially for an even perceptual spread.
+// Once the mallet is in front of the puck (the puck is behind you, between you
+// and your own goal), the timbre warns that a nudge goalward could score on
+// yourself, so the pitch reference alone isn't needed to sense the danger.
 const TONE_BASE_FREQ = 330;
 const TONE_OCTAVES = 1;
 const TONE_VOLUME = 0.08;
@@ -69,13 +72,13 @@ function distanceVolume(localPlayer, y) {
 	return 1 - DISTANCE_FALLOFF * norm;
 }
 
-function toneFrequency(localPlayer, malletY, puck) {
+function toneParams(localPlayer, malletY, puck) {
 	if (typeof malletY !== 'number' || !puck?.onTable || typeof puck.y !== 'number') {
-		return TONE_BASE_FREQ;
+		return { frequency: TONE_BASE_FREQ, danger: false };
 	}
 	const forward = localPlayer === 'p1' ? malletY - puck.y : puck.y - malletY;
 	const norm = Math.max(-1, Math.min(1, forward / TABLE_LENGTH));
-	return TONE_BASE_FREQ * Math.pow(2, norm * TONE_OCTAVES);
+	return { frequency: TONE_BASE_FREQ * Math.pow(2, norm * TONE_OCTAVES), danger: forward > 0 };
 }
 
 function malletAtBorder(mallet, player) {
@@ -196,11 +199,11 @@ export function createGameAudio({ sounds = defaultSounds, tone = createPositionT
 		const localMallet = snapshot.mallets?.[localPlayer];
 		if (isActivePlay(snapshot.state) && localMallet?.onTable) {
 			const pan = panFor(localPlayer, localMallet.x);
-			const frequency = toneFrequency(localPlayer, localMallet.y, snapshot.puck);
+			const { frequency, danger } = toneParams(localPlayer, localMallet.y, snapshot.puck);
 			if (!tone.isPlaying()) {
-				tone.play({ frequency, pan, volume: TONE_VOLUME });
+				tone.play({ frequency, pan, danger, volume: TONE_VOLUME });
 			} else {
-				tone.update({ frequency, pan });
+				tone.update({ frequency, pan, danger });
 			}
 		} else if (tone.isPlaying()) {
 			tone.stop();
