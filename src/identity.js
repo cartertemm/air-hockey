@@ -1,14 +1,12 @@
-import { get, set, remove } from './settings.js';
+import { createIdentity } from 'audiogame-utils/net';
+import { storage } from './settings.js';
 
-const KEY = 'identity';
-const EMPTY = { clientId: null, sessionToken: null, name: null };
+const identity = createIdentity(storage);
 
-export function getIdentity() {
-	return { ...EMPTY, ...(get(KEY, {}) ?? {}) };
-}
+export const getIdentity = identity.get;
 
 export function setIdentityFromWelcome(welcome) {
-	set(KEY, {
+	identity.set({
 		clientId: welcome.clientId,
 		sessionToken: welcome.sessionToken,
 		name: welcome.name,
@@ -16,10 +14,7 @@ export function setIdentityFromWelcome(welcome) {
 }
 
 export function setDisplayName(name) {
-	const current = getIdentity();
-	set(KEY, { ...current, name });
+	identity.set({ name });
 }
 
-export function clearIdentity() {
-	remove(KEY);
-}
+export const clearIdentity = identity.clear;

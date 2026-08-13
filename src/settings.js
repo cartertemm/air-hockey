@@ -1,19 +1,9 @@
-const PREFIX = 'airhockey:';
+import { createStorage } from 'audiogame-utils/storage';
 
-export function get(key, defaultValue = undefined) {
-	const raw = localStorage.getItem(PREFIX + key);
-	if (raw === null) return defaultValue;
-	try {
-		return JSON.parse(raw);
-	} catch {
-		return defaultValue;
-	}
-}
+// The app's single preferences namespace. Existing keys stay under the
+// `airhockey:` prefix they have always used.
+export const storage = createStorage('airhockey');
 
-export function set(key, value) {
-	localStorage.setItem(PREFIX + key, JSON.stringify(value));
-}
-
-export function remove(key) {
-	localStorage.removeItem(PREFIX + key);
-}
+export const get = storage.get;
+export const set = storage.set;
+export const remove = storage.remove;

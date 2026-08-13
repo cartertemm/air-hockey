@@ -1,43 +1,32 @@
-const pressed = new Set();
-const handlers = {
-	keydown: new Set(),
-	keyup: new Set(),
-	keypress: new Set(),
-};
-let initialized = false;
+import { createKeyboard } from 'audiogame-utils/input';
 
-function emit(eventName, event) {
-	for (const fn of handlers[eventName]) fn(event);
-}
-
-function onKeyDown(event) {
-	const key = event.key.toLowerCase();
-	pressed.add(key);
-	emit('keydown', event);
-	if (!event.repeat) emit('keypress', event);
-}
-
-function onKeyUp(event) {
-	const key = event.key.toLowerCase();
-	pressed.delete(key);
-	emit('keyup', event);
-}
+// Handlers are registered against this module rather than the instance, so
+// they survive a re-init the same way they always have.
+const handlers = new Set();
+let instance = null;
 
 export function initKeyboard() {
-	if (initialized) return;
-	window.addEventListener('keydown', onKeyDown);
-	window.addEventListener('keyup', onKeyUp);
-	initialized = true;
+	if (instance) return;
+	instance = createKeyboard();
+	for (const [name, handler] of handlers) instance.on(name, handler);
+}
+
+export function getKeyboard() {
+	return instance;
 }
 
 export function isDown(key) {
-	return pressed.has(key.toLowerCase());
+	return instance?.isDown(key) ?? false;
 }
 
 export function on(eventName, handler) {
-	handlers[eventName]?.add(handler);
+	handlers.add([eventName, handler]);
+	instance?.on(eventName, handler);
 }
 
 export function off(eventName, handler) {
-	handlers[eventName]?.delete(handler);
+	for (const entry of handlers) {
+		if (entry[0] === eventName && entry[1] === handler) handlers.delete(entry);
+	}
+	instance?.off(eventName, handler);
 }

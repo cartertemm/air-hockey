@@ -7,7 +7,7 @@ import {
 } from './physics.js';
 import { on as onTouch, off as offTouch, fingerCount } from './input/touch.js';
 import { on as onMouse, off as offMouse } from './input/mouse.js';
-import { InputHandler } from './input/inputHandler.js';
+import { makeInputHandler } from './input/inputHandler.js';
 import { pauseToggleMsg } from '../network/protocol.js';
 import { speak } from './speech.js';
 
@@ -36,7 +36,7 @@ export class Game {
 		this.emitter = new EventEmitter();
 		this.socket = socket;
 		this.client = createGameClient({ socket });
-		this.input = input ?? new InputHandler();
+		this.input = input ?? makeInputHandler();
 		this.localPlayer = null;
 		this.snapshot = null;
 		this._keyboardLatch = false;

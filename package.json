@@ -13,7 +13,7 @@
 		"test:watch": "vitest"
 	},
 	"dependencies": {
-		"cacophony": "^0.18.3",
+		"audiogame-utils": "file:../audiogame_utils",
 		"ws": "^8.20.0"
 	},
 	"devDependencies": {

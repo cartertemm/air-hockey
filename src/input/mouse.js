@@ -1,64 +1,37 @@
-let buttonDown = false;
-let pos = { x: 0, y: 0 };
-const handlers = {
-	mousedown: new Set(),
-	mouseup:   new Set(),
-	mousemove: new Set(),
-};
-let initialized = false;
+import { createMouse } from 'audiogame-utils/input';
 
-function emit(name, payload) {
-	for (const fn of handlers[name]) fn(payload);
-}
-
-function onMouseDown(event) {
-	if (event.button !== 0) return;
-	buttonDown = true;
-	pos = { x: event.clientX, y: event.clientY };
-	emit('mousedown', { x: pos.x, y: pos.y });
-}
-
-function onMouseUp(event) {
-	if (event.button !== 0) return;
-	buttonDown = false;
-	pos = { x: event.clientX, y: event.clientY };
-	emit('mouseup', { x: pos.x, y: pos.y });
-}
-
-function onMouseMove(event) {
-	pos = { x: event.clientX, y: event.clientY };
-	emit('mousemove', { x: pos.x, y: pos.y });
-}
+// Handlers are registered against this module rather than the instance, so
+// they survive the init/dispose cycle that entering and leaving gameplay does.
+const handlers = new Set();
+let instance = null;
 
 export function initMouse() {
-	if (initialized) return;
-	window.addEventListener('mousedown', onMouseDown);
-	window.addEventListener('mouseup',   onMouseUp);
-	window.addEventListener('mousemove', onMouseMove);
-	initialized = true;
+	disposeMouse();
+	instance = createMouse();
+	for (const [name, handler] of handlers) instance.on(name, handler);
 }
 
 export function disposeMouse() {
-	buttonDown = false;
-	if (!initialized) return;
-	window.removeEventListener('mousedown', onMouseDown);
-	window.removeEventListener('mouseup',   onMouseUp);
-	window.removeEventListener('mousemove', onMouseMove);
-	initialized = false;
+	instance?.dispose();
+	instance = null;
 }
 
 export function isButtonDown() {
-	return buttonDown;
+	return instance?.isButtonDown() ?? false;
 }
 
 export function getPosition() {
-	return { ...pos };
+	return instance?.getPosition() ?? { x: 0, y: 0 };
 }
 
 export function on(name, handler) {
-	handlers[name]?.add(handler);
+	handlers.add([name, handler]);
+	instance?.on(name, handler);
 }
 
 export function off(name, handler) {
-	handlers[name]?.delete(handler);
+	for (const entry of handlers) {
+		if (entry[0] === name && entry[1] === handler) handlers.delete(entry);
+	}
+	instance?.off(name, handler);
 }
