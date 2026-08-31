@@ -4,6 +4,7 @@ import { setIdentityFromWelcome, getIdentity, clearIdentity } from '../src/ident
 import { getSpeechMode, setSpeechMode, getRate, getPitch, getVoice, SPEECH_MODE_TTS } from '../src/speech.js';
 import { MSG, ERR } from 'network/protocol.js';
 import * as settings from '../src/settings.js';
+import { AIR_HOCKEY_FACTS } from '../src/airHockeyFacts.js';
 
 function makeFakeClient() {
 	const handlers = {};
@@ -540,7 +541,7 @@ describe('session: settings screen', () => {
 		openSettings(root);
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Test voice').click();
 		expect(globalThis.speechSynthesis.spoken.length).toBe(1);
-		expect(globalThis.speechSynthesis.spoken[0]).toMatch(/air hockey|puck|Brunswick|Cummings|USAA|mallet|tournament|Houston|Sega|air track/i);
+		expect(AIR_HOCKEY_FACTS).toContain(globalThis.speechSynthesis.spoken[0]);
 	});
 
 	test('voiceschanged event repopulates the voice select while on the settings screen', () => {
