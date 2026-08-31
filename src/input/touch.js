@@ -1,7 +1,5 @@
 import { createTouch } from 'audiogame-utils/input';
 
-// Handlers are registered against this module rather than the instance, so
-// they survive the init/dispose cycle that entering and leaving gameplay does.
 const handlers = new Set();
 let instance = null;
 

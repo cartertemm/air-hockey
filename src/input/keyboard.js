@@ -1,7 +1,5 @@
 import { createKeyboard } from 'audiogame-utils/input';
 
-// Handlers are registered against this module rather than the instance, so
-// they survive a re-init the same way they always have.
 const handlers = new Set();
 let instance = null;
 
