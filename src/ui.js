@@ -1,7 +1,7 @@
 // Declarative pre-game screens. Each screen is a function taking (root, props)
 // that returns undefined or a cleanup function, rendered via renderScreen.
 
-import { el, mount, renderScreen, renderInstallPwaIos, radioGroup } from 'audiogame-utils/ui';
+import { el, mount, renderScreen, renderInstallPwaIos, radioGroup, rangeField } from 'audiogame-utils/ui';
 import { createFocusTrap } from 'audiogame-utils/focus';
 
 export { renderScreen };
@@ -301,41 +301,23 @@ export function settings(root, props) {
 		}
 		populateVoices(props.voices ?? []);
 		const fmt = (n) => Number(n).toFixed(1);
-		const rateInput = el('input', {
-			id: 'settings-rate', type: 'range',
-			min: '0.5', max: '2', step: '0.1',
-			value: String(props.rate),
-			'aria-valuetext': fmt(props.rate),
-			onChange: (event) => {
-				const v = parseFloat(event.target.value);
-				event.target.setAttribute('aria-valuetext', fmt(v));
-				props.onRateChange(v);
-			},
-			onInput: (event) => {
-				event.target.setAttribute('aria-valuetext', fmt(parseFloat(event.target.value)));
-			},
-		});
-		const pitchInput = el('input', {
-			id: 'settings-pitch', type: 'range',
-			min: '0.1', max: '2', step: '0.1',
-			value: String(props.pitch),
-			'aria-valuetext': fmt(props.pitch),
-			onChange: (event) => {
-				const v = parseFloat(event.target.value);
-				event.target.setAttribute('aria-valuetext', fmt(v));
-				props.onPitchChange(v);
-			},
-			onInput: (event) => {
-				event.target.setAttribute('aria-valuetext', fmt(parseFloat(event.target.value)));
-			},
-		});
 		voiceBlock = el('div', {},
 			el('label', { for: 'settings-voice', text: 'Voice' }),
 			select,
-			el('label', { for: 'settings-rate', text: 'Speech rate' }),
-			rateInput,
-			el('label', { for: 'settings-pitch', text: 'Speech pitch' }),
-			pitchInput,
+			rangeField('Speech rate', {
+				id: 'settings-rate',
+				get: () => props.rate,
+				set: (value) => props.onRateChange(value),
+				min: '0.5', max: '2', step: '0.1',
+				format: fmt,
+			}),
+			rangeField('Speech pitch', {
+				id: 'settings-pitch',
+				get: () => props.pitch,
+				set: (value) => props.onPitchChange(value),
+				min: '0.1', max: '2', step: '0.1',
+				format: fmt,
+			}),
 			// Settings is the one pre-game screen that calls speak() directly:
 			// the user is deliberately previewing TTS, so the "pre-game uses
 			// native screen reader" rule does not apply here.

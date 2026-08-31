@@ -298,6 +298,7 @@ describe('settings screen', () => {
 		const slider = root.querySelector('#settings-rate');
 		expect(slider.getAttribute('aria-valuetext')).toBe('1.0');
 		slider.value = '1.5';
+		slider.dispatchEvent(new Event('input', { bubbles: true }));
 		slider.dispatchEvent(new Event('change', { bubbles: true }));
 		expect(calls).toEqual([1.5]);
 		expect(slider.getAttribute('aria-valuetext')).toBe('1.5');
