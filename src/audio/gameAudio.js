@@ -1,4 +1,5 @@
 import { audio } from '../audioEngine.js';
+import { createPositionTone } from './positionTone.js';
 import { malletHitTier, wallBounceTier, goalTier } from './tiers.js';
 import { speech } from '../speech.js';
 import { TABLE_WIDTH, TABLE_LENGTH, MALLET_RADIUS } from '../physics.js';
@@ -7,7 +8,6 @@ import { lerp, range_convert } from 'audiogame-utils/math';
 const defaultSounds = {
 	tableLoop:          audio.sfx(() => import('../../sounds/table_loop.ogg?url')),
 	puckLoop:           audio.sfx(() => import('../../sounds/puck_loop.ogg?url')),
-	malletLoop:         audio.sfx(() => import('../../sounds/mallet_loop.ogg?url')),
 	opponentMalletLoop: audio.sfx(() => import('../../sounds/opponent_mallet_loop.ogg?url')),
 	hitPuck1:           audio.sfx(() => import('../../sounds/hit_puck1.ogg?url')),
 	hitPuck2:           audio.sfx(() => import('../../sounds/hit_puck2.ogg?url')),
@@ -27,10 +27,20 @@ const defaultSounds = {
 const TABLE_LOOP_START_PITCH = 0.5;
 const TABLE_LOOP_RAMP_MS = 1000;
 
+// The local player's position is conveyed by a quiet looping tone. Pitch
+// encodes where the mallet sits relative to the puck along the forward axis
+// (toward the opponent's goal): behind the puck drops the pitch, in front
+// raises it. Frequency scales exponentially for an even perceptual spread.
+// Once the mallet is in front of the puck (the puck is behind you, between you
+// and your own goal), the timbre warns that a nudge goalward could score on
+// yourself, so the pitch reference alone isn't needed to sense the danger.
+const TONE_BASE_FREQ = 330;
+const TONE_OCTAVES = 1;
+const TONE_VOLUME = 0.08;
+
 const VOL = {
 	tableLoop: 0.35,
 	puckLoop: 0.6,
-	malletLoop: 0.5,
 	opponentMalletLoop: 0.5,
 	hitPuck1: 1.0,
 	hitPuck2: 0.85,
@@ -63,6 +73,15 @@ function distanceVolume(localPlayer, y) {
 	return lerp(1, 1 - DISTANCE_FALLOFF, norm);
 }
 
+function toneParams(localPlayer, malletY, puck) {
+	if (typeof malletY !== 'number' || !puck?.onTable || typeof puck.y !== 'number') {
+		return { frequency: TONE_BASE_FREQ, danger: false };
+	}
+	const forward = localPlayer === 'p1' ? malletY - puck.y : puck.y - malletY;
+	const norm = Math.max(-1, Math.min(1, forward / TABLE_LENGTH));
+	return { frequency: TONE_BASE_FREQ * Math.pow(2, norm * TONE_OCTAVES), danger: forward > 0 };
+}
+
 function malletAtBorder(mallet, player) {
 	if (!mallet?.onTable) return false;
 	if (mallet.x <= MALLET_RADIUS || mallet.x >= TABLE_WIDTH - MALLET_RADIUS) return true;
@@ -73,7 +92,7 @@ export async function preloadGameAudio() {
 	await audio.preload(Object.values(defaultSounds));
 }
 
-export function createGameAudio({ sounds = defaultSounds } = {}) {
+export function createGameAudio({ sounds = defaultSounds, tone = createPositionTone() } = {}) {
 	let localPlayer = 'p1';
 	let active = false;
 	let detachListeners = () => {};
@@ -180,15 +199,15 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 		}
 		const localMallet = snapshot.mallets?.[localPlayer];
 		if (isActivePlay(snapshot.state) && localMallet?.onTable) {
-			const vol = VOL.malletLoop * distanceVolume(localPlayer, localMallet.y);
 			const pan = panFor(localPlayer, localMallet.x);
-			if (!sounds.malletLoop.isLooping()) {
-				sounds.malletLoop.play({ loop: 'infinite', volume: vol, pan });
+			const { frequency, danger } = toneParams(localPlayer, localMallet.y, snapshot.puck);
+			if (!tone.isPlaying()) {
+				tone.play({ frequency, pan, danger, volume: TONE_VOLUME });
 			} else {
-				sounds.malletLoop.update({ pan, volume: vol });
+				tone.update({ frequency, pan, danger });
 			}
-		} else if (sounds.malletLoop.isLooping()) {
-			sounds.malletLoop.stop();
+		} else if (tone.isPlaying()) {
+			tone.stop();
 		}
 		const opponent = localPlayer === 'p1' ? 'p2' : 'p1';
 		const opponentMallet = snapshot.mallets?.[opponent];
@@ -252,7 +271,7 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 			detachListeners();
 			sounds.tableLoop.stop();
 			sounds.puckLoop.stop();
-			sounds.malletLoop.stop();
+			tone.stop();
 			sounds.opponentMalletLoop.stop();
 		},
 	};

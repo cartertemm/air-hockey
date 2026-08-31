@@ -42,7 +42,7 @@ mkcert -install
 mkcert -key-file dev-certs/key.pem -cert-file dev-certs/cert.pem localhost 127.0.0.1 ::1
 ```
 
-The WebSocket server expects those cert files to exist. If they do not, `npm run server` will refuse to start. Vite can still come up without them, but it falls back to HTTP and prints a warning.
+The WebSocket server expects those cert files to exist. If they do not, `npm run server` will refuse to start. Vite can still come up without them, but it falls back to HTTP and prints a warning, and the client always dials `wss://`, so the game cannot connect over that fallback. In practice you need the certs.
 
 Start the WebSocket server:
 
@@ -53,10 +53,22 @@ npm run server
 In another terminal, start the client:
 
 ```bash
-npm run dev -- --host
+npm run dev
 ```
 
-Then open the Vite URL in a browser. If you are testing with other devices on the same network, make sure they can reach the machine running the server and dev client.
+Then open the Vite URL in a browser, which defaults to `https://localhost:5173`. The dev server already binds to all interfaces, so you do not need `--host`.
+
+## Playing on a local network
+
+Two people on the same network can play without any production server. Everything runs on one machine (the host); the other device just points its browser at the host.
+
+1. Find the host machine's LAN IP (`ipconfig` on Windows, `ifconfig` / `ip addr` elsewhere), for example `192.168.1.50`.
+2. Start the server (`npm run server`) and client (`npm run dev`) on the host.
+3. On the other device, open `https://<host-ip>:5173` (for example `https://192.168.1.50:5173`).
+
+Only port `5173` needs to be reachable from the other device, so allow it through the host's firewall. The WebSocket server on `8443` only ever talks to the host itself: the browser connects same-origin to `/ws`, and Vite proxies that to `localhost:8443`.
+
+The dev certs are signed by a local CA that only the host machine trusts, so the second device will show a certificate warning. That is expected on a LAN: just accept it and continue. If you want to avoid the warning, install the mkcert root CA (`mkcert -CAROOT`) on the other device too.
 
 ## Environment notes
 

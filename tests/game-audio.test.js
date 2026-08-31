@@ -40,11 +40,20 @@ function fakeSfx() {
 	return fake;
 }
 
+function fakeTone() {
+	let playing = false;
+	return {
+		play: vi.fn(() => { playing = true; }),
+		update: vi.fn(),
+		stop: vi.fn(() => { playing = false; }),
+		isPlaying: vi.fn(() => playing),
+	};
+}
+
 function makeSounds() {
 	return {
 		tableLoop: fakeSfx(),
 		puckLoop: fakeSfx(),
-		malletLoop: fakeSfx(),
 		opponentMalletLoop: fakeSfx(),
 		hitPuck1: fakeSfx(),
 		hitPuck2: fakeSfx(),
@@ -145,47 +154,100 @@ describe('game audio loops', () => {
 		}));
 	});
 
-	test('mallet loop tracks local mallet x and stops when off-table or outside gameplay', () => {
+	test('position tone pitch tracks the local mallet relative to the puck and stops off-table', () => {
 		const sounds = makeSounds();
-		const audio = createGameAudio({ sounds });
+		const tone = fakeTone();
+		const audio = createGameAudio({ sounds, tone });
 		const game = createFakeGame();
 		audio.attach(game);
 		game.emit('gameStart', { localPlayer: 'p1', pointLimit: 7 });
+		// Mallet behind the puck (y=12 < puck y=48): lower than the base pitch.
 		game.emit('snapshot', {
 			state: 'PLAYING',
-			puck: { onTable: true, x: 24 },
-			mallets: { p1: { x: 10, onTable: true }, p2: { x: 30, onTable: true } },
+			puck: { onTable: true, x: 24, y: 48 },
+			mallets: { p1: { x: 24, y: 12, onTable: true }, p2: { x: 30, y: 84, onTable: true } },
 		});
-		expect(sounds.malletLoop.play).toHaveBeenCalledTimes(1);
-		expect(sounds.malletLoop.play).toHaveBeenCalledWith(expect.objectContaining({
-			loop: 'infinite',
-			volume: 0.5,
-		}));
+		expect(tone.play).toHaveBeenCalledTimes(1);
+		expect(tone.play).toHaveBeenCalledWith(expect.objectContaining({ volume: 0.08, danger: false }));
+		expect(tone.play.mock.calls[0][0].frequency).toBeCloseTo(330 * Math.pow(2, -36 / 96), 3);
+		expect(tone.play.mock.calls[0][0].frequency).toBeLessThan(330);
+		// Mallet in front of the puck (y=60 > puck y=48): higher than the base pitch.
 		game.emit('snapshot', {
 			state: 'PLAYING',
-			puck: { onTable: true, x: 24 },
-			mallets: { p1: { x: 20, onTable: true }, p2: { x: 30, onTable: true } },
+			puck: { onTable: true, x: 24, y: 48 },
+			mallets: { p1: { x: 24, y: 60, onTable: true }, p2: { x: 30, y: 84, onTable: true } },
 		});
-		expect(sounds.malletLoop.play).toHaveBeenCalledTimes(1);
-		expect(sounds.malletLoop.update).toHaveBeenCalledTimes(1);
+		expect(tone.play).toHaveBeenCalledTimes(1);
+		expect(tone.update).toHaveBeenCalledTimes(1);
+		expect(tone.update.mock.calls[0][0].frequency).toBeCloseTo(330 * Math.pow(2, 12 / 96), 3);
+		expect(tone.update.mock.calls[0][0].frequency).toBeGreaterThan(330);
+		expect(tone.update.mock.calls[0][0].danger).toBe(true);
 		game.emit('snapshot', {
 			state: 'PLAYING',
-			puck: { onTable: true, x: 24 },
-			mallets: { p1: { x: 20, onTable: false }, p2: { x: 30, onTable: true } },
+			puck: { onTable: true, x: 24, y: 48 },
+			mallets: { p1: { x: 24, y: 60, onTable: false }, p2: { x: 30, y: 84, onTable: true } },
 		});
-		expect(sounds.malletLoop.stop).toHaveBeenCalledTimes(1);
+		expect(tone.stop).toHaveBeenCalledTimes(1);
 		game.emit('snapshot', {
 			state: 'PLAYING',
-			puck: { onTable: true, x: 24 },
-			mallets: { p1: { x: 20, onTable: true }, p2: { x: 30, onTable: true } },
+			puck: { onTable: true, x: 24, y: 48 },
+			mallets: { p1: { x: 24, y: 60, onTable: true }, p2: { x: 30, y: 84, onTable: true } },
 		});
-		expect(sounds.malletLoop.play).toHaveBeenCalledTimes(2);
+		expect(tone.play).toHaveBeenCalledTimes(2);
 		game.emit('snapshot', {
 			state: 'MATCH_END',
 			puck: { onTable: false, x: 24 },
-			mallets: { p1: { x: 20, onTable: true }, p2: { x: 30, onTable: true } },
+			mallets: { p1: { x: 24, y: 60, onTable: true }, p2: { x: 30, y: 84, onTable: true } },
 		});
-		expect(sounds.malletLoop.stop).toHaveBeenCalledTimes(2);
+		expect(tone.stop).toHaveBeenCalledTimes(2);
+	});
+
+	test('position tone forward axis flips for p2 (in front means toward y=0)', () => {
+		const sounds = makeSounds();
+		const tone = fakeTone();
+		const audio = createGameAudio({ sounds, tone });
+		const game = createFakeGame();
+		audio.attach(game);
+		game.emit('gameStart', { localPlayer: 'p2', pointLimit: 7 });
+		// p2 mallet at y=30 is in front of the puck at y=48 (closer to y=0): higher pitch.
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24, y: 48 },
+			mallets: { p1: { x: 10, y: 12, onTable: true }, p2: { x: 24, y: 30, onTable: true } },
+		});
+		expect(tone.play.mock.calls[0][0].frequency).toBeCloseTo(330 * Math.pow(2, 18 / 96), 3);
+		expect(tone.play.mock.calls[0][0].frequency).toBeGreaterThan(330);
+		expect(tone.play.mock.calls[0][0].danger).toBe(true);
+	});
+
+	test('position tone flags danger only while the puck is behind the mallet', () => {
+		const sounds = makeSounds();
+		const tone = fakeTone();
+		const audio = createGameAudio({ sounds, tone });
+		const game = createFakeGame();
+		audio.attach(game);
+		game.emit('gameStart', { localPlayer: 'p1', pointLimit: 7 });
+		// Puck in front of the mallet (y=48 > mallet y=20): safe.
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24, y: 48 },
+			mallets: { p1: { x: 24, y: 20, onTable: true }, p2: { x: 30, y: 84, onTable: true } },
+		});
+		expect(tone.play.mock.calls[0][0].danger).toBe(false);
+		// Puck slips behind the mallet (y=10 < mallet y=20): danger toggles on.
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24, y: 10 },
+			mallets: { p1: { x: 24, y: 20, onTable: true }, p2: { x: 30, y: 84, onTable: true } },
+		});
+		expect(tone.update.mock.calls.at(-1)[0].danger).toBe(true);
+		// Puck back in front: danger clears.
+		game.emit('snapshot', {
+			state: 'PLAYING',
+			puck: { onTable: true, x: 24, y: 48 },
+			mallets: { p1: { x: 24, y: 20, onTable: true }, p2: { x: 30, y: 84, onTable: true } },
+		});
+		expect(tone.update.mock.calls.at(-1)[0].danger).toBe(false);
 	});
 
 	test('opponent mallet loop tracks the non-local mallet and stops when off-table', () => {
@@ -334,7 +396,6 @@ describe('game audio one-shots', () => {
 	});
 
 	test('goal scored plays tiered goal sound', async () => {
-		const { initSpeech } = await import('../src/speech.js');
 		speech.init();
 		const sounds = makeSounds();
 		const audio = createGameAudio({ sounds });
@@ -345,7 +406,6 @@ describe('game audio one-shots', () => {
 	});
 
 	test('off_table and serve:assigned play their sounds', async () => {
-		const { initSpeech } = await import('../src/speech.js');
 		speech.init();
 		const sounds = makeSounds();
 		const audio = createGameAudio({ sounds });
@@ -360,7 +420,6 @@ describe('game audio one-shots', () => {
 
 describe('game audio pause announcements', () => {
 	async function setup(localPlayer) {
-		const { initSpeech } = await import('../src/speech.js');
 		document.body.innerHTML = '';
 		speech.init();
 		const sounds = makeSounds();
@@ -398,7 +457,6 @@ describe('game audio pause announcements', () => {
 
 describe('game audio gameplay announcements', () => {
 	async function setup(localPlayer) {
-		const { initSpeech } = await import('../src/speech.js');
 		document.body.innerHTML = '';
 		speech.init();
 		const sounds = makeSounds();
@@ -477,9 +535,10 @@ describe('game audio gameplay announcements', () => {
 });
 
 describe('game audio dispose', () => {
-	test('dispose stops both loops', () => {
+	test('dispose stops the loops and the position tone', () => {
 		const sounds = makeSounds();
-		const audio = createGameAudio({ sounds });
+		const tone = fakeTone();
+		const audio = createGameAudio({ sounds, tone });
 		const game = createFakeGame();
 		audio.attach(game);
 		game.emit('snapshot', {
@@ -489,7 +548,7 @@ describe('game audio dispose', () => {
 		audio.dispose();
 		expect(sounds.tableLoop.stop).toHaveBeenCalledTimes(1);
 		expect(sounds.puckLoop.stop).toHaveBeenCalledTimes(1);
-		expect(sounds.malletLoop.stop).toHaveBeenCalledTimes(1);
+		expect(tone.stop).toHaveBeenCalledTimes(1);
 		expect(sounds.opponentMalletLoop.stop).toHaveBeenCalledTimes(1);
 	});
 });
