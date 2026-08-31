@@ -493,3 +493,22 @@ describe('game audio dispose', () => {
 		expect(sounds.opponentMalletLoop.stop).toHaveBeenCalledTimes(1);
 	});
 });
+
+describe('spatial math', () => {
+	test('pan and volume are unchanged by the math helper swap', () => {
+		const sounds = makeSounds();
+		const audio = createGameAudio({ sounds });
+		const game = createFakeGame();
+		audio.attach(game);
+		game.emit('event', { type: 'puck:wall_bounce', x: 0, y: 0, speed: 10 });
+		game.emit('event', { type: 'puck:wall_bounce', x: 48, y: 96, speed: 10 });
+		game.emit('event', { type: 'puck:wall_bounce', x: 24, y: 48, speed: 10 });
+		const calls = sounds.wallSoft.play.mock.calls.map(([options]) => options);
+		expect(calls[0].pan).toBeCloseTo(-1, 10);
+		expect(calls[0].volume).toBeCloseTo(0.7, 10);
+		expect(calls[1].pan).toBeCloseTo(1, 10);
+		expect(calls[1].volume).toBeCloseTo(0.21, 10);
+		expect(calls[2].pan).toBeCloseTo(0, 10);
+		expect(calls[2].volume).toBeCloseTo(0.455, 10);
+	});
+});
