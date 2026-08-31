@@ -1,9 +1,9 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { createGameAudio } from '../src/audio/gameAudio.js';
-import { initSpeech } from '../src/speech.js';
+import { speech } from '../src/speech.js';
 
 beforeEach(() => {
-	initSpeech();
+	speech.init();
 });
 
 function createFakeGame() {
@@ -335,7 +335,7 @@ describe('game audio one-shots', () => {
 
 	test('goal scored plays tiered goal sound', async () => {
 		const { initSpeech } = await import('../src/speech.js');
-		initSpeech();
+		speech.init();
 		const sounds = makeSounds();
 		const audio = createGameAudio({ sounds });
 		const game = createFakeGame();
@@ -346,7 +346,7 @@ describe('game audio one-shots', () => {
 
 	test('off_table and serve:assigned play their sounds', async () => {
 		const { initSpeech } = await import('../src/speech.js');
-		initSpeech();
+		speech.init();
 		const sounds = makeSounds();
 		const audio = createGameAudio({ sounds });
 		const game = createFakeGame();
@@ -362,7 +362,7 @@ describe('game audio pause announcements', () => {
 	async function setup(localPlayer) {
 		const { initSpeech } = await import('../src/speech.js');
 		document.body.innerHTML = '';
-		initSpeech();
+		speech.init();
 		const sounds = makeSounds();
 		const audio = createGameAudio({ sounds });
 		const game = createFakeGame();
@@ -400,7 +400,7 @@ describe('game audio gameplay announcements', () => {
 	async function setup(localPlayer) {
 		const { initSpeech } = await import('../src/speech.js');
 		document.body.innerHTML = '';
-		initSpeech();
+		speech.init();
 		const sounds = makeSounds();
 		const audio = createGameAudio({ sounds });
 		const game = createFakeGame();

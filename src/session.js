@@ -1,4 +1,4 @@
-import { getIdentity, setDisplayName, setLocalClientId } from './identity.js';
+import { identity } from './identity.js';
 import { generateName } from './names.js';
 import {
 	renderScreen,
@@ -19,23 +19,10 @@ import {
 } from './ui.js';
 import { createClient as realCreateClient } from './net/client.js';
 import { isIOS as isIOSPlatform, isIOSStandalone as isIOSStandaloneDefault } from 'audiogame-utils/platform';
-import * as settings from './settings.js';
+import { storage } from './settings.js';
 import { initTouch, disposeTouch } from './input/touch.js';
 import { initMouse, disposeMouse } from './input/mouse.js';
-import {
-	initSpeech,
-	speak,
-	primeTts,
-	getSpeechMode,
-	setSpeechMode,
-	getVoices,
-	getVoice,
-	setVoice,
-	getRate,
-	setRate,
-	getPitch,
-	setPitch,
-} from './speech.js';
+import { speech } from './speech.js';
 import { randomFact } from './airHockeyFacts.js';
 import {
 	MSG,
@@ -50,7 +37,7 @@ import {
 	lobbySubscribe,
 	lobbyUnsubscribe,
 } from 'network/protocol.js';
-import { sfx } from './sfx.js';
+import { audio } from './sfx.js';
 import { createClock } from 'audiogame-utils/clock';
 
 const MAX_FRAME_DT = 0.05;
@@ -60,9 +47,9 @@ const ROOM_ERROR_MESSAGES = {
 	[ERR.ROOM_NOT_FOUND]:    'That room no longer exists.',
 };
 
-const speakerTest          = sfx(() => import('../sounds/speaker_test.ogg?url'));
-const connectNotification  = sfx(() => import('../sounds/connect_notification.ogg?url'));
-const disconnectNotification = sfx(() => import('../sounds/disconnect_notification.ogg?url'));
+const speakerTest          = audio.sfx(() => import('../sounds/speaker_test.ogg?url'));
+const connectNotification  = audio.sfx(() => import('../sounds/connect_notification.ogg?url'));
+const disconnectNotification = audio.sfx(() => import('../sounds/disconnect_notification.ogg?url'));
 let gameBundlePromise = null;
 async function loadGameBundle() {
 	if (gameBundlePromise) return gameBundlePromise;
@@ -105,7 +92,7 @@ export function startSession({
 	function prepareGameplay() {
 		if (gameplayPreparation) return gameplayPreparation;
 		gameplayPreparation = (async () => {
-			initSpeech();
+			speech.init();
 			const bundle = await loadGameplay();
 			await bundle.preloadGameAudio();
 			return bundle;
@@ -117,8 +104,8 @@ export function startSession({
 
 	function screenInstallPwaIos() {
 		const proceed = () => {
-			settings.set('pwaPromptDismissed', true);
-			const { name } = getIdentity();
+			storage.set('pwaPromptDismissed', true);
+			const { name } = identity.get();
 			go(name ? screenOfflineMenu() : screenNameEntry());
 		};
 		return {
@@ -133,7 +120,7 @@ export function startSession({
 			props: {
 				onSubmit: value => {
 					const name = value ?? generateName();
-					setDisplayName(name);
+					identity.set({ name: name });
 					go(screenOfflineMenu());
 				},
 			},
@@ -141,7 +128,7 @@ export function startSession({
 	}
 
 	function screenOfflineMenu() {
-		const { name } = getIdentity();
+		const { name } = identity.get();
 		return {
 			screen: mainMenu,
 			props: {
@@ -155,7 +142,7 @@ export function startSession({
 	}
 
 	function screenOnlineMenu() {
-		const { name } = getIdentity();
+		const { name } = identity.get();
 		return {
 			screen: mainMenu,
 			props: {
@@ -238,7 +225,7 @@ export function startSession({
 	}
 
 	function findMe(room) {
-		const { clientId } = getIdentity();
+		const { clientId } = identity.get();
 		return room.members.find(m => m.clientId === clientId) ?? null;
 	}
 
@@ -255,7 +242,7 @@ export function startSession({
 				room,
 				localReady,
 				onToggleReady: () => {
-					primeTts();
+					speech.primeTts();
 					client?.send(localReady ? roomUnready() : roomReady());
 				},
 				onLeave: leave,
@@ -281,11 +268,11 @@ export function startSession({
 			go(screenOnlineMenu());
 		};
 		const confirm = async () => {
-			primeTts();
+			speech.primeTts();
 			await prepareGameplay();
 			client?.send(roomConfirm());
 		};
-		const { clientId } = getIdentity();
+		const { clientId } = identity.get();
 		const canConfirm = room.members[0]?.clientId === clientId;
 		const me = findMe(room);
 		if (!canConfirm && !me?.confirmed) {
@@ -373,7 +360,7 @@ export function startSession({
 				}
 				if (msg.type === MSG.ROOM_STATE) {
 					if (msg.room.lastEventMessage) {
-						speak(msg.room.lastEventMessage, true);
+						speech.speak(msg.room.lastEventMessage, true);
 					}
 					if (msg.room.phase === 'waiting') {
 						go(screenWaitingRoom(msg.room));
@@ -408,7 +395,7 @@ export function startSession({
 		// welcomeSeen=false, and the UI flashes connectFailed.
 		const myClient = createClient({
 			onOpen: (c) => {
-				c.send(hello({ name: getIdentity().name }));
+				c.send(hello({ name: identity.get().name }));
 			},
 			onMessage: onServerMessage,
 			onClose: () => {
@@ -486,31 +473,31 @@ export function startSession({
 		return {
 			screen: settingsScreen,
 			props: {
-				name: getIdentity().name ?? '',
+				name: identity.get().name ?? '',
 				isIOS: onIOS,
-				mode: getSpeechMode(),
-				voices: getVoices(),
-				voiceURI: getVoice()?.voiceURI ?? null,
-				rate: getRate(),
-				pitch: getPitch(),
+				mode: speech.getMode(),
+				voices: speech.getVoices(),
+				voiceURI: speech.getVoice()?.voiceURI ?? null,
+				rate: speech.getRate(),
+				pitch: speech.getPitch(),
 				focusField,
 				subscribeVoicesChanged,
 				onNameSave: (value) => {
 					const trimmed = (value ?? '').trim();
 					if (trimmed.length === 0) return;
-					setDisplayName(trimmed);
+					identity.set({ name: trimmed });
 				},
 				generateName,
 				onModeChange: (mode) => {
-					setSpeechMode(mode);
+					speech.setMode(mode);
 					go(screenSettings(wasOnline, `mode-${mode}`));
 				},
 				onVoiceChange: (voiceURI) => {
-					if (voiceURI) setVoice(voiceURI);
+					if (voiceURI) speech.setVoice(voiceURI);
 				},
-				onRateChange: (value) => setRate(value),
-				onPitchChange: (value) => setPitch(value),
-				onTestVoice: () => speak(randomFact(), true),
+				onRateChange: (value) => speech.setRate(value),
+				onPitchChange: (value) => speech.setPitch(value),
+				onTestVoice: () => speech.speak(randomFact(), true),
 				onBack: back,
 			},
 			onEscape: back,
@@ -522,8 +509,8 @@ export function startSession({
 	function onServerMessage(msg) {
 		if (!msg || typeof msg.type !== 'string') return;
 		if (msg.type === MSG.WELCOME) {
-			setLocalClientId(msg.clientId);
-			setDisplayName(msg.name);
+			identity.set({ clientId: msg.clientId });
+			identity.set({ name: msg.name });
 			if (!welcomeSeen) {
 				welcomeSeen = true;
 				connectNotification.play();
@@ -536,7 +523,7 @@ export function startSession({
 
 	// ---- Boot ------------------------------------------------------------
 
-	initSpeech();
+	speech.init();
 	// Desktop Escape = "go back". Each screen builder that supports a back
 	// action sets onEscape on its returned record. iOS standalone is excluded
 	// because it has no physical Escape key and VoiceOver reserves Escape for
@@ -549,8 +536,8 @@ export function startSession({
 		event.preventDefault();
 		state.onEscape();
 	});
-	const { name } = getIdentity();
-	if (isIOS() && !isIOSStandalone() && !settings.get('pwaPromptDismissed', false)) {
+	const { name } = identity.get();
+	if (isIOS() && !isIOSStandalone() && !storage.get('pwaPromptDismissed', false)) {
 		go(screenInstallPwaIos());
 	} else if (!name) {
 		go(screenNameEntry());

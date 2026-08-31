@@ -1,9 +1,10 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { startSession } from '../src/session.js';
-import { setDisplayName, getIdentity, clearIdentity } from '../src/identity.js';
-import { getSpeechMode, setSpeechMode, getRate, getPitch, getVoice, SPEECH_MODE_TTS } from '../src/speech.js';
+import { identity } from '../src/identity.js';
+import { speech } from '../src/speech.js';
+import { MODE_TTS } from 'audiogame-utils/speech';
 import { MSG, ERR } from 'network/protocol.js';
-import * as settings from '../src/settings.js';
+import { storage } from '../src/settings.js';
 import { AIR_HOCKEY_FACTS } from '../src/airHockeyFacts.js';
 
 function makeFakeClient() {
@@ -84,7 +85,7 @@ async function flushAsyncWork() {
 
 beforeEach(() => {
 	document.body.innerHTML = '';
-	clearIdentity();
+	identity.clear();
 });
 
 describe('session: iOS install prompt', () => {
@@ -102,7 +103,7 @@ describe('session: iOS install prompt', () => {
 
 	test('skipped when running as iOS standalone', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({
 			root,
 			createClient: makeFakeClient(),
@@ -124,7 +125,7 @@ describe('session: iOS install prompt', () => {
 	});
 
 	test('skipped when pwaPromptDismissed is already set', () => {
-		settings.set('pwaPromptDismissed', true);
+		storage.set('pwaPromptDismissed', true);
 		const root = setupRoot();
 		startSession({
 			root,
@@ -144,12 +145,12 @@ describe('session: iOS install prompt', () => {
 			isIOSStandalone: () => false,
 		});
 		clickText(root, 'Continue anyway');
-		expect(settings.get('pwaPromptDismissed')).toBe(true);
+		expect(storage.get('pwaPromptDismissed')).toBe(true);
 		expect(root.querySelector('h1').textContent).toBe('Your name');
 	});
 
 	test('Continue sets the flag and routes to offline menu when name is stored', () => {
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const root = setupRoot();
 		startSession({
 			root,
@@ -158,7 +159,7 @@ describe('session: iOS install prompt', () => {
 			isIOSStandalone: () => false,
 		});
 		clickText(root, 'Continue anyway');
-		expect(settings.get('pwaPromptDismissed')).toBe(true);
+		expect(storage.get('pwaPromptDismissed')).toBe(true);
 		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
 	});
 });
@@ -173,7 +174,7 @@ describe('session: first load', () => {
 
 	test('stored name -> offline main menu', () => {
 		const root = setupRoot();
-		setDisplayName('Swift Otter');
+		identity.set({ name: 'Swift Otter' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		expect(root.querySelector('h1').textContent).toBe('Welcome, Swift Otter');
 		const labels = [...root.querySelectorAll('button')].map(b => b.textContent);
@@ -182,7 +183,7 @@ describe('session: first load', () => {
 
 	test('no net-client is created until the user clicks Connect', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		let built = 0;
 		const factory = (h) => { built++; return makeFakeClient()(h); };
 		startSession({ root, createClient: factory, isIOS: () => false });
@@ -212,7 +213,7 @@ describe('session: name entry', () => {
 describe('session: connect flow', () => {
 	test('Connect button creates a client and transitions to connecting', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect to server
@@ -221,7 +222,7 @@ describe('session: connect flow', () => {
 
 	test('welcome transitions to online main menu and persists identity', async () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
@@ -236,7 +237,7 @@ describe('session: connect flow', () => {
 
 	test('first socket close before welcome -> connectFailed', async () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click();
@@ -247,7 +248,7 @@ describe('session: connect flow', () => {
 
 	test('second welcome updates identity but does not re-render the online menu', async () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
@@ -261,7 +262,7 @@ describe('session: connect flow', () => {
 
 	test('Cancel during connecting returns to offline main menu', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
@@ -275,7 +276,7 @@ describe('session: connect flow', () => {
 describe('session: async close timing (regression)', () => {
 	test('Disconnect does not flash connectFailed when close fires asynchronously', async () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeAsyncFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
@@ -294,7 +295,7 @@ describe('session: async close timing (regression)', () => {
 
 	test('Cancel during connecting does not flash connectFailed when close fires asynchronously', async () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeAsyncFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
@@ -310,7 +311,7 @@ describe('session: async close timing (regression)', () => {
 describe('session: offline stub screens', () => {
 	test('Test speakers screen mentions left/right and returns to offline menu', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		const testSpeakers = [...root.querySelectorAll('button')].find(b => b.textContent === 'Test speakers');
 		testSpeakers.click();
@@ -334,7 +335,7 @@ function dispatchEscape(root) {
 describe('session: Escape goes back', () => {
 	test('Escape on Test speakers returns to offline menu', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Test speakers').click();
 		expect(root.querySelector('h1').textContent).toBe('Test speakers');
@@ -344,7 +345,7 @@ describe('session: Escape goes back', () => {
 
 	test('Escape on Configure settings returns to offline menu', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Configure settings').click();
 		expect(root.querySelector('h1').textContent).toBe('Configure settings');
@@ -354,7 +355,7 @@ describe('session: Escape goes back', () => {
 
 	test('Escape during connecting cancels and returns to offline menu', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
@@ -366,7 +367,7 @@ describe('session: Escape goes back', () => {
 
 	test('Escape on connectFailed returns to offline menu', async () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
@@ -379,7 +380,7 @@ describe('session: Escape goes back', () => {
 
 	test('Escape on the offline main menu does nothing', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
 		dispatchEscape(root);
@@ -388,7 +389,7 @@ describe('session: Escape goes back', () => {
 
 	test('Escape is ignored on iOS', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Test speakers').click();
 		expect(root.querySelector('h1').textContent).toBe('Test speakers');
@@ -406,7 +407,7 @@ describe('session: settings screen', () => {
 
 	test('opening settings from offline menu shows the settings screen with name field', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		expect(root.querySelector('h1').textContent).toBe('Configure settings');
@@ -416,7 +417,7 @@ describe('session: settings screen', () => {
 
 	test('Back button returns to the offline menu', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Back').click();
@@ -425,35 +426,35 @@ describe('session: settings screen', () => {
 
 	test('typing a name and blurring saves it via setDisplayName', () => {
 		const root = setupRoot();
-		setDisplayName('Old');
+		identity.set({ name: 'Old' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		const input = root.querySelector('#settings-name');
 		input.value = 'New Name';
 		input.dispatchEvent(new Event('blur'));
-		expect(getIdentity().name).toBe('New Name');
+		expect(identity.get().name).toBe('New Name');
 	});
 
 	test('blank name on blur is a no-op', () => {
 		const root = setupRoot();
-		setDisplayName('Old');
+		identity.set({ name: 'Old' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		const input = root.querySelector('#settings-name');
 		input.value = '   ';
 		input.dispatchEvent(new Event('blur'));
-		expect(getIdentity().name).toBe('Old');
+		expect(identity.get().name).toBe('Old');
 	});
 
 	test('Generate name button persists a random name and refocuses the input', () => {
 		const root = setupRoot();
-		setDisplayName('Original');
+		identity.set({ name: 'Original' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		const input = root.querySelector('#settings-name');
 		const generate = [...root.querySelectorAll('button')].find(b => b.textContent === 'Generate name');
 		generate.click();
-		const after = getIdentity().name;
+		const after = identity.get().name;
 		expect(after).not.toBe('Original');
 		expect(after).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
 		expect(input.value).toBe(after);
@@ -462,14 +463,14 @@ describe('session: settings screen', () => {
 
 	test('switching to TTS on desktop reveals voice/rate/pitch controls and persists the mode', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		expect(root.querySelector('#settings-voice')).toBeNull();
 		const ttsRadio = root.querySelector('#settings-mode-tts');
 		ttsRadio.checked = true;
 		ttsRadio.dispatchEvent(new Event('change', { bubbles: true }));
-		expect(getSpeechMode()).toBe('tts');
+		expect(speech.getMode()).toBe('tts');
 		expect(root.querySelector('#settings-voice')).toBeTruthy();
 		expect(root.querySelector('#settings-rate')).toBeTruthy();
 		expect(root.querySelector('#settings-pitch')).toBeTruthy();
@@ -477,7 +478,7 @@ describe('session: settings screen', () => {
 
 	test('iOS opens settings without output mode radios', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		expect(root.querySelector('#settings-mode-aria')).toBeNull();
@@ -489,29 +490,29 @@ describe('session: settings screen', () => {
 
 	test('rate slider change persists via setRate', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		const slider = root.querySelector('#settings-rate');
 		slider.value = '1.4';
 		slider.dispatchEvent(new Event('change', { bubbles: true }));
-		expect(getRate()).toBeCloseTo(1.4);
+		expect(speech.getRate()).toBeCloseTo(1.4);
 	});
 
 	test('pitch slider change persists via setPitch', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		const slider = root.querySelector('#settings-pitch');
 		slider.value = '0.6';
 		slider.dispatchEvent(new Event('change', { bubbles: true }));
-		expect(getPitch()).toBeCloseTo(0.6);
+		expect(speech.getPitch()).toBeCloseTo(0.6);
 	});
 
 	test('voice select change persists via setVoice', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		globalThis.speechSynthesis.voices = [
 			{ name: 'Alpha', voiceURI: 'a' },
 			{ name: 'Beta',  voiceURI: 'b' },
@@ -521,17 +522,17 @@ describe('session: settings screen', () => {
 		const select = root.querySelector('#settings-voice');
 		select.value = 'b';
 		select.dispatchEvent(new Event('change', { bubbles: true }));
-		expect(getVoice()?.voiceURI).toBe('b');
+		expect(speech.getVoice()?.voiceURI).toBe('b');
 	});
 
 	test('Test voice button speaks one of the air hockey facts', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		// The Test voice button only appears once the user is in TTS mode, so
 		// match that invariant here (iOS session default would normally force
 		// TTS, but speech.js reads navigator.standalone directly rather than
 		// the injected isIOS fake).
-		setSpeechMode(SPEECH_MODE_TTS);
+		speech.setMode(MODE_TTS);
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Test voice').click();
@@ -541,7 +542,7 @@ describe('session: settings screen', () => {
 
 	test('voiceschanged event repopulates the voice select while on the settings screen', () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		globalThis.speechSynthesis.voices = [];
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
@@ -561,7 +562,7 @@ describe('session: settings screen', () => {
 // ROOM_STATE snapshots can address the local member.
 async function openOnlineMenu({ isIOS = () => false, name = 'A', clientId = 'c1' } = {}) {
 	const root = setupRoot();
-	setDisplayName(name);
+	identity.set({ name: name });
 	const factory = makeFakeClient();
 	startSession({ root, createClient: factory, isIOS });
 	root.querySelector('button').click(); // Connect
@@ -827,7 +828,7 @@ describe('session: waiting room', () => {
 describe('session: handoff and countdown', () => {
 	test('clicking Continue on desktop handoff sends roomConfirm', async () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -863,7 +864,7 @@ describe('session: handoff and countdown', () => {
 	test('clicking Continue waits for gameplay preload before sending roomConfirm', async () => {
 		const preload = deferred();
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -925,7 +926,7 @@ describe('session: handoff and countdown', () => {
 	test('waiting player auto-confirms after gameplay preload finishes', async () => {
 		const preload = deferred();
 		const root = setupRoot();
-		setDisplayName('B');
+		identity.set({ name: 'B' });
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -970,7 +971,7 @@ describe('session: handoff and countdown', () => {
 
 	test('pressing Enter on desktop handoff sends roomConfirm', async () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -1034,7 +1035,7 @@ describe('session: handoff and countdown', () => {
 			}
 		}
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -1114,7 +1115,7 @@ describe('session: handoff and countdown', () => {
 
 	test('iOS handoff shows the VoiceOver notice and Continue sends roomConfirm', async () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -1151,9 +1152,9 @@ describe('session: handoff and countdown', () => {
 	});
 
 	test('iOS handoff VoiceOver notice shows even when running in the browser (prompt dismissed)', async () => {
-		settings.set('pwaPromptDismissed', true);
+		storage.set('pwaPromptDismissed', true);
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -1190,7 +1191,7 @@ describe('session: handoff and countdown', () => {
 describe('session: disconnect', () => {
 	test('Disconnect tears down client and returns to offline main menu', async () => {
 		const root = setupRoot();
-		setDisplayName('A');
+		identity.set({ name: 'A' });
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect

@@ -11,7 +11,7 @@ import { on as onTouch, off as offTouch, fingerCount } from './input/touch.js';
 import { on as onMouse, off as offMouse } from './input/mouse.js';
 import { makeInputHandler } from './input/inputHandler.js';
 import { pauseToggleMsg } from '../network/protocol.js';
-import { speak } from './speech.js';
+import { speech } from './speech.js';
 import { clamp } from 'audiogame-utils/math';
 
 const MALLET_SPEED_BASE = 24;
@@ -144,12 +144,12 @@ export class Game {
 		const p1 = scores?.p1?.points ?? 0;
 		const p2 = scores?.p2?.points ?? 0;
 		if (!this.localPlayer) {
-			speak(`Score: ${p1} to ${p2}.`, true);
+			speech.speak(`Score: ${p1} to ${p2}.`, true);
 			return;
 		}
 		const you = this.localPlayer === 'p1' ? p1 : p2;
 		const opp = this.localPlayer === 'p1' ? p2 : p1;
-		speak(`You ${you}, opponent ${opp}.`, true);
+		speech.speak(`You ${you}, opponent ${opp}.`, true);
 	}
 
 	_applyTouch(screenX, screenY) {

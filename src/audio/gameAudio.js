@@ -1,27 +1,27 @@
-import { audio, sfx } from '../sfx.js';
+import { audio } from '../sfx.js';
 import { malletHitTier, wallBounceTier, goalTier } from './tiers.js';
-import { speak } from '../speech.js';
+import { speech } from '../speech.js';
 import { TABLE_WIDTH, TABLE_LENGTH, MALLET_RADIUS } from '../physics.js';
 import { lerp, range_convert } from 'audiogame-utils/math';
 
 const defaultSounds = {
-	tableLoop:          sfx(() => import('../../sounds/table_loop.ogg?url')),
-	puckLoop:           sfx(() => import('../../sounds/puck_loop.ogg?url')),
-	malletLoop:         sfx(() => import('../../sounds/mallet_loop.ogg?url')),
-	opponentMalletLoop: sfx(() => import('../../sounds/opponent_mallet_loop.ogg?url')),
-	hitPuck1:           sfx(() => import('../../sounds/hit_puck1.ogg?url')),
-	hitPuck2:           sfx(() => import('../../sounds/hit_puck2.ogg?url')),
-	hitPuck3:           sfx(() => import('../../sounds/hit_puck3.ogg?url')),
-	wallHard:           sfx(() => import('../../sounds/puck_hit_side_hard.ogg?url')),
-	wallSoft:           sfx(() => import('../../sounds/puck_hit_side_soft.ogg?url')),
-	goal1:              sfx(() => import('../../sounds/goal_1.ogg?url')),
-	goal2:              sfx(() => import('../../sounds/goal_2.ogg?url')),
-	goal3:              sfx(() => import('../../sounds/goal_3.ogg?url')),
-	goal4:              sfx(() => import('../../sounds/goal_4.ogg?url')),
-	goal5:              sfx(() => import('../../sounds/goal_5.ogg?url')),
-	offTable:           sfx(() => import('../../sounds/puck_off_table.ogg?url')),
-	placePuck:          sfx(() => import('../../sounds/place_puck.ogg?url')),
-	malletBorder:       sfx(() => import('../../sounds/mallet_border.ogg?url')),
+	tableLoop:          audio.sfx(() => import('../../sounds/table_loop.ogg?url')),
+	puckLoop:           audio.sfx(() => import('../../sounds/puck_loop.ogg?url')),
+	malletLoop:         audio.sfx(() => import('../../sounds/mallet_loop.ogg?url')),
+	opponentMalletLoop: audio.sfx(() => import('../../sounds/opponent_mallet_loop.ogg?url')),
+	hitPuck1:           audio.sfx(() => import('../../sounds/hit_puck1.ogg?url')),
+	hitPuck2:           audio.sfx(() => import('../../sounds/hit_puck2.ogg?url')),
+	hitPuck3:           audio.sfx(() => import('../../sounds/hit_puck3.ogg?url')),
+	wallHard:           audio.sfx(() => import('../../sounds/puck_hit_side_hard.ogg?url')),
+	wallSoft:           audio.sfx(() => import('../../sounds/puck_hit_side_soft.ogg?url')),
+	goal1:              audio.sfx(() => import('../../sounds/goal_1.ogg?url')),
+	goal2:              audio.sfx(() => import('../../sounds/goal_2.ogg?url')),
+	goal3:              audio.sfx(() => import('../../sounds/goal_3.ogg?url')),
+	goal4:              audio.sfx(() => import('../../sounds/goal_4.ogg?url')),
+	goal5:              audio.sfx(() => import('../../sounds/goal_5.ogg?url')),
+	offTable:           audio.sfx(() => import('../../sounds/puck_off_table.ogg?url')),
+	placePuck:          audio.sfx(() => import('../../sounds/place_puck.ogg?url')),
+	malletBorder:       audio.sfx(() => import('../../sounds/mallet_border.ogg?url')),
 };
 
 const TABLE_LOOP_START_PITCH = 0.5;
@@ -101,8 +101,8 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 		if (!active) return;
 		switch (event.type) {
 			case 'game:countdown':
-				if (event.seconds === 0) speak('go', true);
-				else speak(String(event.seconds), true);
+				if (event.seconds === 0) speech.speak('go', true);
+				else speech.speak(String(event.seconds), true);
 				break;
 			case 'puck:mallet_hit': {
 				const key = `hitPuck${malletHitTier(event.speed)}`;
@@ -126,40 +126,40 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 				const you = localPlayer === 'p1' ? event.p1Points : event.p2Points;
 				const opp = localPlayer === 'p1' ? event.p2Points : event.p1Points;
 				const who = event.scoredBy === localPlayer ? 'You score' : 'Opponent scores';
-				speak(`${who}. ${you} to ${opp}.`, true);
+				speech.speak(`${who}. ${you} to ${opp}.`, true);
 				break;
 			}
 			case 'puck:off_table':
 				sounds.offTable.play({ volume: VOL.offTable });
-				speak('Puck off table.', true);
+				speech.speak('Puck off table.', true);
 				break;
 			case 'serve:assigned':
 				sounds.placePuck.play({ volume: VOL.placePuck });
 				if (event.player) {
-					speak(event.player === localPlayer ? 'Your serve.' : 'Opponent\'s serve.', true);
+					speech.speak(event.player === localPlayer ? 'Your serve.' : 'Opponent\'s serve.', true);
 				}
 				break;
 			case 'match:end':
-				if (event.winner) speak(event.winner === localPlayer ? 'You win.' : 'Opponent wins.', true);
+				if (event.winner) speech.speak(event.winner === localPlayer ? 'You win.' : 'Opponent wins.', true);
 				break;
 			case 'game:end': {
 				if (!event.winner) break;
 				const you = localPlayer === 'p1' ? event.p1Games : event.p2Games;
 				const opp = localPlayer === 'p1' ? event.p2Games : event.p1Games;
 				const who = event.winner === localPlayer ? 'You win game' : 'Opponent wins game';
-				speak(`${who}. ${you} to ${opp}.`, true);
+				speech.speak(`${who}. ${you} to ${opp}.`, true);
 				break;
 			}
 			case 'forfeit:confirmed':
-				speak(event.player === localPlayer ? 'You forfeit.' : 'Opponent forfeits.', true);
+				speech.speak(event.player === localPlayer ? 'You forfeit.' : 'Opponent forfeits.', true);
 				break;
 			case 'game:paused':
-				if (event.byPlayer === localPlayer) speak('Game paused.', true);
-				else speak(`Game paused by ${event.byName}.`, true);
+				if (event.byPlayer === localPlayer) speech.speak('Game paused.', true);
+				else speech.speak(`Game paused by ${event.byName}.`, true);
 				break;
 			case 'game:resumed':
-				if (event.byPlayer === localPlayer) speak('Game resumed.', true);
-				else speak(`Game resumed by ${event.byName}.`, true);
+				if (event.byPlayer === localPlayer) speech.speak('Game resumed.', true);
+				else speech.speak(`Game resumed by ${event.byName}.`, true);
 				break;
 		}
 	}
@@ -236,7 +236,7 @@ export function createGameAudio({ sounds = defaultSounds } = {}) {
 				if (!active || !msg?.finalScore) return;
 				const you = localPlayer === 'p1' ? msg.finalScore.p1 : msg.finalScore.p2;
 				const opp = localPlayer === 'p1' ? msg.finalScore.p2 : msg.finalScore.p1;
-				speak(`Final score: you ${you}, opponent ${opp}.`, true);
+				speech.speak(`Final score: you ${you}, opponent ${opp}.`, true);
 			});
 			if (game.snapshot) onSnapshot(game.snapshot);
 			detachListeners = () => {
