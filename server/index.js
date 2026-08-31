@@ -5,6 +5,7 @@ import { CONFIG } from './config.js';
 import { createServer } from 'audiogame-utils/net/server';
 import { codec } from '../network/transport.js';
 import { attachHandlers } from './handshake.js';
+import { initRooms } from './room.js';
 
 function readCertsOrExit() {
 	if (!fs.existsSync(CONFIG.CERT_PATH) || !fs.existsSync(CONFIG.KEY_PATH)) {
@@ -18,6 +19,7 @@ function readCertsOrExit() {
 }
 
 const game = createServer({ codec });
+initRooms(game);
 attachHandlers(game);
 
 const tls = readCertsOrExit();

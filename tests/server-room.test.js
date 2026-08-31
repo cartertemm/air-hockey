@@ -7,6 +7,7 @@ import {
 	getRoom,
 	subscribeLobby,
 	unsubscribeLobby,
+	initRooms,
 	_resetRooms,
 } from '../server/room.js';
 import { MSG, ERR } from '../network/protocol.js';
@@ -27,8 +28,33 @@ function sentTypes(player) {
 	return player.sent.map(m => m.type);
 }
 
+function makeFakeServer() {
+	const groups = new Map();
+	return {
+		groups,
+		group(name, { persist = false } = {}) {
+			let found = groups.get(name);
+			if (!found) {
+				found = {
+					name,
+					persist,
+					members: new Set(),
+					add(client) { this.members.add(client); client.groups.add(this); return this; },
+					remove(client) { this.members.delete(client); client.groups.delete(this); return this; },
+					send(msg) { for (const c of this.members) c.send(msg); },
+					close() { this.members.clear(); groups.delete(name); },
+					get clients() { return [...this.members]; },
+				};
+				groups.set(name, found);
+			}
+			return found;
+		},
+	};
+}
+
 beforeEach(() => {
 	_resetRooms();
+	initRooms(makeFakeServer());
 });
 
 describe('createRoom', () => {
@@ -236,6 +262,34 @@ describe('lobby subscriptions', () => {
 	});
 
 	test('unsubscribeLobby stops updates', () => {
+		const watcher = makePlayer('w');
+		subscribeLobby(watcher);
+		unsubscribeLobby(watcher);
+		watcher.sent.length = 0;
+		createRoom(makePlayer('h'), { mode: 'single', pointLimit: 7 });
+		expect(sentTypes(watcher)).not.toContain(MSG.LOBBY_UPDATE);
+	});
+});
+
+describe('group fan-out', () => {
+	test('room state reaches both members through the room group', () => {
+		const host = makePlayer('h');
+		const guest = makePlayer('g');
+		const room = createRoom(host, { mode: 'single', pointLimit: 7 });
+		room.addMember(guest);
+		expect(sentTypes(guest)).toContain(MSG.ROOM_STATE);
+		expect(sentTypes(host).filter(t => t === MSG.ROOM_STATE).length).toBeGreaterThan(1);
+	});
+
+	test('lobby subscribers receive updates through the lobby group', () => {
+		const watcher = makePlayer('w');
+		subscribeLobby(watcher);
+		watcher.sent.length = 0;
+		createRoom(makePlayer('h'), { mode: 'single', pointLimit: 7 });
+		expect(sentTypes(watcher)).toContain(MSG.LOBBY_UPDATE);
+	});
+
+	test('unsubscribing stops lobby updates', () => {
 		const watcher = makePlayer('w');
 		subscribeLobby(watcher);
 		unsubscribeLobby(watcher);

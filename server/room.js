@@ -1,8 +1,19 @@
+import { random_choice, random_int } from 'audiogame-utils/math';
 import { MSG, ERR, roomState, roomCountdown, lobbyUpdate } from '../network/protocol.js';
 import { GameSession } from './gameSession.js';
 
 const ADJECTIVES = ['swift', 'brave', 'quiet', 'bright', 'calm', 'wild'];
 const NOUNS      = ['otter', 'falcon', 'comet', 'ember', 'river', 'spark'];
+
+let server = null;
+
+export function initRooms(instance) {
+	server = instance;
+}
+
+function lobbyGroup() {
+	return server.group('lobby');
+}
 
 // ---- Room instances ------------------------------------------------------
 
@@ -30,12 +41,18 @@ export class Room {
 		this.createdAt = Date.now();
 		host.data.room = this;
 		this.game = null;
+		this.group().add(host);
+	}
+
+	group() {
+		return server.group(`room:${this.id}`, { persist: true });
 	}
 
 	addMember(player) {
 		if (this.isFull())            throw new RoomError(ERR.ROOM_FULL);
 		if (this.phase !== 'waiting') throw new RoomError(ERR.ROOM_NOT_JOINABLE);
 		this.members.push(player);
+		this.group().add(player);
 		player.data.room = this;
 		this.broadcastState();
 		broadcastLobbyUpdate();
@@ -44,6 +61,7 @@ export class Room {
 	removeMember(player, { disconnected = false } = {}) {
 		const announcement = disconnected ? `${player.data.name} has disconnected.` : null;
 		this.members = this.members.filter(m => m !== player);
+		this.group().remove(player);
 		this.ready.delete(player);
 		this.confirmed.delete(player);
 		this.startRequested = false;
@@ -126,11 +144,11 @@ export class Room {
 	}
 
 	broadcastState(eventMessage = null) {
-		for (const m of this.members) m.send(roomState({ room: this.snapshot(eventMessage) }));
+		this.group().send(roomState({ room: this.snapshot(eventMessage) }));
 	}
 
 	broadcastCountdown() {
-		for (const m of this.members) m.send(roomCountdown({ roomId: this.id }));
+		this.group().send(roomCountdown({ roomId: this.id }));
 	}
 
 	startGame() {
@@ -175,7 +193,6 @@ export class RoomError extends Error {
 // ---- Registry + lobby subscriptions --------------------------------------
 
 const byId = new Map();
-const lobbySubscribers = new Set();
 
 export function createRoom(host, { mode, pointLimit }) {
 	const id = mintRoomId();
@@ -189,6 +206,7 @@ export function createRoom(host, { mode, pointLimit }) {
 export function destroyRoom(room) {
 	room.game?.stopRealTimeLoop();
 	room.game = null;
+	room.group().close();
 	byId.delete(room.id);
 	broadcastLobbyUpdate();
 }
@@ -197,31 +215,29 @@ export function getRoom(id) {
 	return byId.get(id) ?? null;
 }
 
+function lobbySnapshot() {
+	return lobbyUpdate({
+		full: true,
+		rooms: [...byId.values()].map(r => r.summary()),
+	});
+}
+
 export function subscribeLobby(player) {
-	lobbySubscribers.add(player);
-	sendLobbySnapshotTo(player);
+	lobbyGroup().add(player);
+	player.send(lobbySnapshot());
 }
 
 export function unsubscribeLobby(player) {
-	lobbySubscribers.delete(player);
-}
-
-function sendLobbySnapshotTo(player) {
-	player.send(lobbyUpdate({
-		full: true,
-		rooms: [...byId.values()].map(r => r.summary()),
-	}));
+	lobbyGroup().remove(player);
 }
 
 function broadcastLobbyUpdate() {
-	for (const p of lobbySubscribers) sendLobbySnapshotTo(p);
+	lobbyGroup().send(lobbySnapshot());
 }
 
 function mintRoomId() {
 	for (let attempt = 0; attempt < 100; attempt++) {
-		const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-		const n   = NOUNS[Math.floor(Math.random() * NOUNS.length)];
-		const id = `${adj}-${n}-${Math.floor(Math.random() * 1000)}`;
+		const id = `${random_choice(ADJECTIVES)}-${random_choice(NOUNS)}-${random_int(0, 999)}`;
 		if (!byId.has(id)) return id;
 	}
 	throw new Error('mintRoomId: failed to find a unique id');
@@ -234,5 +250,5 @@ export function _resetRooms() {
 		room.game = null;
 	}
 	byId.clear();
-	lobbySubscribers.clear();
+	server = null;
 }

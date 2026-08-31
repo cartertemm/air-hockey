@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { createServer } from 'audiogame-utils/net/server';
 import { createSocketPair } from 'audiogame-utils/net/testing';
 import { attachHandlers } from '../server/handshake.js';
-import { _resetRooms, getRoom } from '../server/room.js';
+import { _resetRooms, getRoom, initRooms } from '../server/room.js';
 import { MSG, ERR, hello } from '../network/protocol.js';
 
 let game = null;
@@ -26,6 +26,7 @@ function connect() {
 beforeEach(() => {
 	_resetRooms();
 	game = createServer();
+	initRooms(game);
 	attachHandlers(game);
 });
 
