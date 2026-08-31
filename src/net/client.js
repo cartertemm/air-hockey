@@ -1,5 +1,4 @@
 import { createReconnectingClient } from 'network/transport.js';
-import { identity } from '../identity.js';
 
 function buildUrl() {
 	const host = import.meta.env.VITE_WS_HOST;
@@ -14,7 +13,6 @@ export function createClient({ onOpen, onMessage, onClose, onError } = {}) {
 	return createReconnectingClient({
 		url: buildUrl(),
 		protocol: true,
-		identity,
 		onOpen,
 		onMessage,
 		onClose,

@@ -9,3 +9,7 @@ export const clearIdentity = identity.clear;
 export function setDisplayName(name) {
 	identity.set({ name });
 }
+
+export function setLocalClientId(clientId) {
+	identity.set({ clientId });
+}

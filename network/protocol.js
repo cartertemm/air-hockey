@@ -80,8 +80,8 @@ export function roomConfirm() {
 
 // ---- Server -> Client factories -----------------------------------------
 
-export function welcome({ name }) {
-	return { type: MSG.WELCOME, name };
+export function welcome({ clientId, name }) {
+	return { type: MSG.WELCOME, clientId, name };
 }
 
 export function roomState({ room }) {

@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { startSession } from '../src/session.js';
-import { identity, setDisplayName, getIdentity, clearIdentity } from '../src/identity.js';
+import { setDisplayName, getIdentity, clearIdentity } from '../src/identity.js';
 import { getSpeechMode, setSpeechMode, getRate, getPitch, getVoice, SPEECH_MODE_TTS } from '../src/speech.js';
 import { MSG, ERR } from 'network/protocol.js';
 import * as settings from '../src/settings.js';
@@ -56,9 +56,8 @@ function makeAsyncFakeClient() {
 // The library handshake mints the clientId and session token on its own
 // channel, out of sight of onMessage. The fake client has no such channel, so
 // the test stores them the way the library would before the app-level welcome.
-function fireWelcome(factory, { clientId, sessionToken, name, resumed }) {
-	identity.set({ clientId, sessionToken });
-	factory.fireMessage({ type: MSG.WELCOME, name, resumed });
+function fireWelcome(factory, { clientId, name, resumed }) {
+	factory.fireMessage({ type: MSG.WELCOME, clientId, name, resumed });
 }
 
 function setupRoot() {

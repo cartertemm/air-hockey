@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer } from 'audiogame-utils/net/server';
 import { createSocketPair } from 'audiogame-utils/net/testing';
 import { attachHandlers } from '../server/handshake.js';
@@ -97,5 +97,28 @@ describe('attachHandlers: disconnect', () => {
 		peer.socket.close();
 		expect(getRoom(id)).toBeNull();
 		expect(game.clients.length).toBe(0);
+	});
+});
+
+describe('attachHandlers: hello timeout', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+	test('a socket that never sends hello has its session ended', () => {
+		const peer = connect();
+		expect(game.clients.length).toBe(1);
+		vi.advanceTimersByTime(5000);
+		expect(game.clients.length).toBe(0);
+		expect(peer.socket.readyState).not.toBe(1);
+	});
+	test('a socket that sends hello in time is kept', () => {
+		const peer = connect();
+		peer.send(hello({ name: 'A' }));
+		vi.advanceTimersByTime(5000);
+		expect(game.clients.length).toBe(1);
+		expect(peer.socket.readyState).toBe(1);
 	});
 });

@@ -2,7 +2,7 @@ import { createPuck, createMallet, step as physicsStep, MALLET_RADIUS, TABLE_WID
 import { EventEmitter } from '../src/events.js';
 import { GameStateMachine, State } from '../src/stateMachine.js';
 import { gameStart, gameSnapshot, gameEnd } from '../network/protocol.js';
-import { clamp, random_float } from 'audiogame-utils/math';
+import { clamp, random_float, random_choice } from 'audiogame-utils/math';
 
 const COUNTDOWN_MS = 3000;
 const GOAL_HOLD_MS = 2000;
@@ -149,7 +149,7 @@ export class GameSession {
 	start({ now = 0, firstServer = null } = {}) {
 		this.simNow = now;
 		this._timers = [];
-		this.firstServer = firstServer ?? (Math.random() < 0.5 ? 'p1' : 'p2');
+		this.firstServer = firstServer ?? random_choice(['p1', 'p2']);
 		this.stateMachine.startCountdown(this.firstServer);
 		for (const key of ['p1', 'p2']) {
 			this.players[key].send(gameStart({ localPlayer: key, pointLimit: this.pointLimit }));

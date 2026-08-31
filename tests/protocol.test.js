@@ -64,9 +64,10 @@ describe('protocol factories', () => {
 		});
 	});
 
-	test('welcome carries clientId, sessionToken, and name', () => {
-		expect(welcome({ name: 'Swift Otter' })).toEqual({
+	test('welcome carries clientId and name', () => {
+		expect(welcome({ clientId: 'c1', name: 'Swift Otter' })).toEqual({
 			type: 'welcome',
+			clientId: 'c1',
 			name: 'Swift Otter',
 		});
 	});

@@ -1,4 +1,4 @@
-import { getIdentity, setDisplayName } from './identity.js';
+import { getIdentity, setDisplayName, setLocalClientId } from './identity.js';
 import { generateName } from './names.js';
 import {
 	renderScreen,
@@ -520,7 +520,9 @@ export function startSession({
 	// ---- Incoming message router -----------------------------------------
 
 	function onServerMessage(msg) {
+		if (!msg || typeof msg.type !== 'string') return;
 		if (msg.type === MSG.WELCOME) {
+			setLocalClientId(msg.clientId);
 			setDisplayName(msg.name);
 			if (!welcomeSeen) {
 				welcomeSeen = true;

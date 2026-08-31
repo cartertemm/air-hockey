@@ -83,7 +83,7 @@ export function attachHandlers(game) {
 			}
 			clearTimeout(player.data.helloTimer);
 			player.data.name = msg.name || 'anonymous';
-			player.send(welcome({ name: player.data.name }));
+			player.send(welcome({ clientId: player.id, name: player.data.name }));
 			return;
 		}
 		try {
