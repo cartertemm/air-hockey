@@ -1,4 +1,4 @@
-import { audio } from '../sfx.js';
+import { audio } from '../audioEngine.js';
 import { malletHitTier, wallBounceTier, goalTier } from './tiers.js';
 import { speech } from '../speech.js';
 import { TABLE_WIDTH, TABLE_LENGTH, MALLET_RADIUS } from '../physics.js';

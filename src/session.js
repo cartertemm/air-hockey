@@ -37,7 +37,7 @@ import {
 	lobbySubscribe,
 	lobbyUnsubscribe,
 } from 'network/protocol.js';
-import { audio } from './sfx.js';
+import { audio } from './audioEngine.js';
 import { createClock } from 'audiogame-utils/clock';
 
 const MAX_FRAME_DT = 0.05;
