@@ -2,6 +2,7 @@
 // that returns undefined or a cleanup function, rendered via renderScreen.
 
 import { el, mount, renderScreen, renderInstallPwaIos, radioGroup } from 'audiogame-utils/ui';
+import { createFocusTrap } from 'audiogame-utils/focus';
 
 export { renderScreen };
 
@@ -157,17 +158,10 @@ export function roomError(root, props) {
 }
 
 export function gameplay(root) {
-	// role="application" + tabindex puts desktop screen readers into focus
-	// mode so single-letter shortcuts (P, space) pass through to the game
-	// instead of being captured as browse-mode quick-navigation keys.
-	const region = el('main', {
-		role: 'application',
-		'aria-label': 'gameplay',
-		tabindex: '-1',
-		autoFocus: true,
-	});
-	root.innerHTML = '';
-	root.appendChild(region);
+	const region = el('main');
+	mount(root, [region]);
+	const trap = createFocusTrap(region, { label: 'gameplay' });
+	return trap.release;
 }
 
 export function handoffIos(root, props) {

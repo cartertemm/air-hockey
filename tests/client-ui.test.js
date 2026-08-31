@@ -482,3 +482,23 @@ describe('createGame', () => {
 		expect(legends).toEqual(['Mode', 'Points to win']);
 	});
 });
+
+describe('gameplay', () => {
+	test('mounts a focused application region', () => {
+		const root = setupRoot();
+		renderScreen(root, gameplay, {});
+		const region = root.querySelector('main');
+		expect(region.getAttribute('role')).toBe('application');
+		expect(region.getAttribute('aria-label')).toBe('gameplay');
+		expect(region.getAttribute('tabindex')).toBe('-1');
+		expect(document.activeElement).toBe(region);
+	});
+
+	test('releases the focus trap on dispose', () => {
+		const root = setupRoot();
+		const screen = renderScreen(root, gameplay, {});
+		const region = root.querySelector('main');
+		screen.dispose();
+		expect(region.hasAttribute('role')).toBe(false);
+	});
+});
