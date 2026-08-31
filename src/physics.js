@@ -9,6 +9,12 @@ export const GOAL_X_MAX = 30;
 export const PUCK_RADIUS = 2.5;
 export const MALLET_RADIUS = 4;
 export const MAX_PUCK_VELOCITY = 150;
+export const HALF_LENGTH = TABLE_LENGTH / 2;
+
+export const MALLET_Y_BOUNDS = {
+	p1: { min: MALLET_RADIUS, max: HALF_LENGTH },
+	p2: { min: HALF_LENGTH, max: TABLE_LENGTH - MALLET_RADIUS },
+};
 
 const RESTITUTION_WALL = 0.90;
 const RESTITUTION_MALLET = 0.85;

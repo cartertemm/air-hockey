@@ -4,6 +4,8 @@ import {
 	TABLE_WIDTH,
 	TABLE_LENGTH,
 	MALLET_RADIUS,
+	HALF_LENGTH,
+	MALLET_Y_BOUNDS,
 } from './physics.js';
 import { on as onTouch, off as offTouch, fingerCount } from './input/touch.js';
 import { on as onMouse, off as offMouse } from './input/mouse.js';
@@ -12,20 +14,14 @@ import { pauseToggleMsg } from '../network/protocol.js';
 import { speak } from './speech.js';
 import { clamp } from 'audiogame-utils/math';
 
-const HALF = TABLE_LENGTH / 2;
 const MALLET_SPEED_BASE = 24;
 const MALLET_SPEED_FAST = 48;
-
-const Y_BOUNDS = {
-	p1: { min: MALLET_RADIUS, max: HALF },
-	p2: { min: HALF, max: TABLE_LENGTH - MALLET_RADIUS },
-};
 
 export function screenToTable(screenX, screenY, player, screenW, screenH) {
 	const rx = screenX / screenW;
 	const ry = screenY / screenH;
-	if (player === 'p1') return { x: rx * TABLE_WIDTH, y: HALF * (1 - ry) };
-	return { x: (1 - rx) * TABLE_WIDTH, y: HALF + ry * HALF };
+	if (player === 'p1') return { x: rx * TABLE_WIDTH, y: HALF_LENGTH * (1 - ry) };
+	return { x: (1 - rx) * TABLE_WIDTH, y: HALF_LENGTH + ry * HALF_LENGTH };
 }
 
 export class Game {
@@ -159,7 +155,7 @@ export class Game {
 	_applyTouch(screenX, screenY) {
 		if (!this.localPlayer) return;
 		const pos = screenToTable(screenX, screenY, this.localPlayer, window.innerWidth, window.innerHeight);
-		const bounds = Y_BOUNDS[this.localPlayer];
+		const bounds = MALLET_Y_BOUNDS[this.localPlayer];
 		this._local.x = clamp(pos.x, MALLET_RADIUS, TABLE_WIDTH - MALLET_RADIUS);
 		this._local.y = clamp(pos.y, bounds.min, bounds.max);
 	}
@@ -184,7 +180,7 @@ export class Game {
 		}
 		const speed = ih.wasTriggered('moveFast') ? MALLET_SPEED_FAST : MALLET_SPEED_BASE;
 		const len = Math.hypot(dx, dy);
-		const bounds = Y_BOUNDS[this.localPlayer];
+		const bounds = MALLET_Y_BOUNDS[this.localPlayer];
 		this._local.x = clamp(this._local.x + (dx / len) * speed * dt, MALLET_RADIUS, TABLE_WIDTH - MALLET_RADIUS);
 		this._local.y = clamp(this._local.y + (dy / len) * speed * dt, bounds.min, bounds.max);
 		this._sendCurrent();
