@@ -610,8 +610,13 @@ describe('session: create game flow', () => {
 	test('changing mode/points is reflected in the submitted payload', async () => {
 		const { root, factory } = await openOnlineMenu();
 		clickText(root, 'Create game');
-		root.querySelector('input[name=mode][value=bestOf3]').checked = true;
-		root.querySelector('input[name=points][value=11]').checked = true;
+		const radios = [...root.querySelectorAll('input[type=radio]')];
+		const bestOf3 = radios.find(r => r.value === 'bestOf3');
+		const eleven = radios.find(r => r.value === '11');
+		bestOf3.checked = true;
+		bestOf3.dispatchEvent(new Event('change'));
+		eleven.checked = true;
+		eleven.dispatchEvent(new Event('change'));
 		clickText(root, 'Create');
 		const sent = factory.client.sent.find(m => m.type === MSG.ROOM_CREATE);
 		expect(sent).toEqual({ type: MSG.ROOM_CREATE, mode: 'bestOf3', pointLimit: 11 });

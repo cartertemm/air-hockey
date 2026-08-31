@@ -1,7 +1,7 @@
 // Declarative pre-game screens. Each screen is a function taking (root, props)
 // that returns undefined or a cleanup function, rendered via renderScreen.
 
-import { el, mount, renderScreen, renderInstallPwaIos } from 'audiogame-utils/ui';
+import { el, mount, renderScreen, renderInstallPwaIos, radioGroup } from 'audiogame-utils/ui';
 
 export { renderScreen };
 
@@ -70,25 +70,31 @@ export function connectFailed(root, props) {
 }
 
 export function createGame(root, props) {
+	let mode = 'single';
+	let pointLimit = 7;
 	const form = el('form', {
 		onSubmit: (event) => {
 			event.preventDefault();
-			const mode = form.querySelector('input[name=mode]:checked').value;
-			const pointLimit = parseInt(form.querySelector('input[name=points]:checked').value, 10);
 			props.onSubmit({ mode, pointLimit });
 		},
 	},
 		el('h1', { text: 'Create game' }),
-		el('fieldset', {},
-			el('legend', { text: 'Mode' }),
-			el('label', {}, el('input', { type: 'radio', name: 'mode', value: 'single', checked: 'checked' }), ' Single match'),
-			el('label', {}, el('input', { type: 'radio', name: 'mode', value: 'bestOf3' }), ' Best of 3'),
-		),
-		el('fieldset', {},
-			el('legend', { text: 'Points to win' }),
-			el('label', {}, el('input', { type: 'radio', name: 'points', value: '7', checked: 'checked' }), ' 7'),
-			el('label', {}, el('input', { type: 'radio', name: 'points', value: '11' }), ' 11'),
-		),
+		radioGroup('Mode', {
+			get: () => mode,
+			set: (value) => { mode = value; },
+			choices: [
+				{ value: 'single', label: 'Single match' },
+				{ value: 'bestOf3', label: 'Best of 3' },
+			],
+		}),
+		radioGroup('Points to win', {
+			get: () => pointLimit,
+			set: (value) => { pointLimit = Number(value); },
+			choices: [
+				{ value: 7, label: '7' },
+				{ value: 11, label: '11' },
+			],
+		}),
 		el('button', { type: 'submit', text: 'Create', autoFocus: true }),
 		el('button', { type: 'button', text: 'Cancel', onClick: props.onCancel }),
 	);

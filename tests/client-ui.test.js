@@ -444,3 +444,41 @@ describe('screen functions', () => {
 		expect(root.querySelector('button').textContent).toBe('Continue anyway');
 	});
 });
+
+describe('createGame', () => {
+	test('defaults to single match and 7 points', () => {
+		const root = setupRoot();
+		let submitted = null;
+		renderScreen(root, createGame, {
+			onSubmit: (value) => { submitted = value; },
+			onCancel: () => {},
+		});
+		root.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+		expect(submitted).toEqual({ mode: 'single', pointLimit: 7 });
+	});
+
+	test('submits the chosen mode and point limit', () => {
+		const root = setupRoot();
+		let submitted = null;
+		renderScreen(root, createGame, {
+			onSubmit: (value) => { submitted = value; },
+			onCancel: () => {},
+		});
+		const radios = [...root.querySelectorAll('input[type=radio]')];
+		const bestOf3 = radios.find(r => r.value === 'bestOf3');
+		const eleven = radios.find(r => r.value === '11');
+		bestOf3.checked = true;
+		bestOf3.dispatchEvent(new Event('change'));
+		eleven.checked = true;
+		eleven.dispatchEvent(new Event('change'));
+		root.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+		expect(submitted).toEqual({ mode: 'bestOf3', pointLimit: 11 });
+	});
+
+	test('labels the two fieldsets', () => {
+		const root = setupRoot();
+		renderScreen(root, createGame, { onSubmit: () => {}, onCancel: () => {} });
+		const legends = [...root.querySelectorAll('legend')].map(l => l.textContent);
+		expect(legends).toEqual(['Mode', 'Points to win']);
+	});
+});
