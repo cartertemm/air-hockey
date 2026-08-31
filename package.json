@@ -13,7 +13,7 @@
 		"test:watch": "vitest"
 	},
 	"dependencies": {
-		"audiogame-utils": "github:cartertemm/audiogame-utils",
+		"audiogame-utils": "git+https://github.com/cartertemm/audiogame-utils.git",
 		"ws": "^8.20.0"
 	},
 	"devDependencies": {
