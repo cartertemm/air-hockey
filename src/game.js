@@ -1,4 +1,4 @@
-import { EventEmitter } from './events.js';
+import { EventEmitter } from 'audiogame-utils/events';
 import { createGameClient } from './net/gameClient.js';
 import {
 	TABLE_WIDTH,

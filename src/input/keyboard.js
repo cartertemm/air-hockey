@@ -13,10 +13,6 @@ export function getKeyboard() {
 	return instance;
 }
 
-export function isDown(key) {
-	return instance?.isDown(key) ?? false;
-}
-
 export function on(eventName, handler) {
 	handlers.add([eventName, handler]);
 	instance?.on(eventName, handler);

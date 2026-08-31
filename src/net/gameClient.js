@@ -1,5 +1,5 @@
 import { inputMsg, MSG } from '../../network/protocol.js';
-import { EventEmitter } from '../events.js';
+import { EventEmitter } from 'audiogame-utils/events';
 
 const MIN_INPUT_INTERVAL_MS = 1000 / 60;
 

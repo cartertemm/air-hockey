@@ -22,14 +22,6 @@ export function fingerCount() {
 	return instance?.fingerCount() ?? 0;
 }
 
-export function getFinger(index) {
-	return instance?.getFinger(index) ?? null;
-}
-
-export function getAllFingers() {
-	return instance?.getAllFingers() ?? [];
-}
-
 export function on(name, handler) {
 	handlers.add([name, handler]);
 	instance?.on(name, handler);

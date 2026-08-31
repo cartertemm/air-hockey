@@ -1,11 +1,9 @@
-import { createSpeech, MODE_ARIA, MODE_TTS, MODE_BOTH } from 'audiogame-utils/speech';
+import { createSpeech, MODE_TTS } from 'audiogame-utils/speech';
 import { storage } from './settings.js';
 
 const speech = createSpeech({ storage, idPrefix: 'sr' });
 
-export const SPEECH_MODE_ARIA = MODE_ARIA;
-export const SPEECH_MODE_TTS  = MODE_TTS;
-export const SPEECH_MODE_BOTH = MODE_BOTH;
+export const SPEECH_MODE_TTS = MODE_TTS;
 
 export const initSpeech = speech.init;
 export const speak      = speech.speak;

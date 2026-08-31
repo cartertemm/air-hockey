@@ -1,7 +1,4 @@
-import {
-	wrapSocket as wrapSocketWithCodec,
-	createReconnectingClient as createReconnectingClientWithCodec,
-} from 'audiogame-utils/net';
+import { createReconnectingClient as createReconnectingClientWithCodec } from 'audiogame-utils/net';
 import { encode, decode } from './protocol.js';
 
 // Binds the shared wire format to the generic transport, so neither the client
@@ -9,10 +6,6 @@ import { encode, decode } from './protocol.js';
 const codec = { encode, decode };
 
 export { codec };
-
-export function wrapSocket(socket, options = {}) {
-	return wrapSocketWithCodec(socket, { codec, ...options });
-}
 
 export function createReconnectingClient(options = {}) {
 	return createReconnectingClientWithCodec({ codec, ...options });

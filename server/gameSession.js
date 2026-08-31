@@ -1,5 +1,5 @@
 import { createPuck, createMallet, step as physicsStep, MALLET_RADIUS, TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
-import { EventEmitter } from '../src/events.js';
+import { EventEmitter } from 'audiogame-utils/events';
 import { GameStateMachine, State } from '../src/stateMachine.js';
 import { gameStart, gameSnapshot, gameEnd } from '../network/protocol.js';
 import { clamp, random_float, random_choice } from 'audiogame-utils/math';

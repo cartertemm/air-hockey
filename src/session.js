@@ -18,7 +18,7 @@ import {
 	settings as settingsScreen,
 } from './ui.js';
 import { createClient as realCreateClient } from './net/client.js';
-import { isIOS as isIOSPlatform, isIOSStandalone as isIOSStandaloneDefault } from './platform.js';
+import { isIOS as isIOSPlatform, isIOSStandalone as isIOSStandaloneDefault } from 'audiogame-utils/platform';
 import * as settings from './settings.js';
 import { initTouch, disposeTouch } from './input/touch.js';
 import { initMouse, disposeMouse } from './input/mouse.js';

@@ -14,14 +14,6 @@ export function disposeMouse() {
 	instance = null;
 }
 
-export function isButtonDown() {
-	return instance?.isButtonDown() ?? false;
-}
-
-export function getPosition() {
-	return instance?.getPosition() ?? { x: 0, y: 0 };
-}
-
 export function on(name, handler) {
 	handlers.add([name, handler]);
 	instance?.on(name, handler);
