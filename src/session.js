@@ -51,7 +51,9 @@ import {
 	lobbyUnsubscribe,
 } from 'network/protocol.js';
 import { sfx } from './sfx.js';
+import { createClock } from 'audiogame-utils/clock';
 
+const MAX_FRAME_DT = 0.05;
 const ROOM_ERROR_MESSAGES = {
 	[ERR.ROOM_FULL]:         'That room just filled up. Pick another or create a new one.',
 	[ERR.ROOM_NOT_JOINABLE]: 'That room is no longer accepting players.',
@@ -324,19 +326,14 @@ export function startSession({
 		let audio = null;
 		let disposed = false;
 		let gameplayReady = false;
-		let frameHandle = 0;
-		let lastFrameTime = 0;
 		const pendingMessages = [];
-		function step(now) {
-			if (disposed) return;
-			if (game) {
-				const dt = lastFrameTime === 0 ? 1 / 60 : Math.min((now - lastFrameTime) / 1000, 0.05);
-				game.tick?.(dt);
+		const clock = createClock({
+			onTick: (dt) => {
+				if (disposed || !game) return;
+				game.tick?.(Math.min(dt, MAX_FRAME_DT));
 				game.client.flushPending?.();
-			}
-			lastFrameTime = now;
-			frameHandle = requestAnimationFrame(step);
-		}
+			},
+		});
 		(async () => {
 			const { Game, createGameAudio } = await prepareGameplay();
 			if (disposed) return;
@@ -345,7 +342,7 @@ export function startSession({
 			initTouch({ target: document.body });
 			initMouse();
 			game = new Game({ socket: client });
-			frameHandle = requestAnimationFrame(step);
+			clock.start();
 			audio = createGameAudio();
 			if (disposed) {
 				audio.dispose();
@@ -362,7 +359,7 @@ export function startSession({
 			props: { roomId },
 			onDispose: () => {
 				disposed = true;
-				if (frameHandle) cancelAnimationFrame(frameHandle);
+				clock.stop();
 				game?.dispose?.();
 				disposeTouch();
 				disposeMouse();
