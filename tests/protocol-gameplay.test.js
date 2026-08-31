@@ -65,8 +65,4 @@ describe('gameplay protocol', () => {
 	test('decode rejects malformed JSON', () => {
 		expect(() => decode('not json')).toThrow(ProtocolError);
 	});
-
-	test('decode rejects missing type', () => {
-		expect(() => decode('{}')).toThrow(ProtocolError);
-	});
 });

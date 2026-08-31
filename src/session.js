@@ -1,4 +1,4 @@
-import { getIdentity, setIdentityFromWelcome, setDisplayName } from './identity.js';
+import { getIdentity, setDisplayName } from './identity.js';
 import { generateName } from './names.js';
 import {
 	renderScreen,
@@ -408,12 +408,7 @@ export function startSession({
 		// welcomeSeen=false, and the UI flashes connectFailed.
 		const myClient = createClient({
 			onOpen: (c) => {
-				const id = getIdentity();
-				c.send(hello({
-					clientId: id.clientId ?? undefined,
-					sessionToken: id.sessionToken ?? undefined,
-					name: id.name,
-				}));
+				c.send(hello({ name: getIdentity().name }));
 			},
 			onMessage: onServerMessage,
 			onClose: () => {
@@ -526,7 +521,7 @@ export function startSession({
 
 	function onServerMessage(msg) {
 		if (msg.type === MSG.WELCOME) {
-			setIdentityFromWelcome(msg);
+			setDisplayName(msg.name);
 			if (!welcomeSeen) {
 				welcomeSeen = true;
 				connectNotification.play();

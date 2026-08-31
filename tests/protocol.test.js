@@ -51,10 +51,8 @@ describe('protocol constants', () => {
 
 describe('protocol factories', () => {
 	test('hello with all fields', () => {
-		expect(hello({ clientId: 'c1', sessionToken: 't1', name: 'Swift Otter' })).toEqual({
+		expect(hello({ name: 'Swift Otter' })).toEqual({
 			type: 'hello',
-			clientId: 'c1',
-			sessionToken: 't1',
 			name: 'Swift Otter',
 		});
 	});
@@ -62,17 +60,13 @@ describe('protocol factories', () => {
 	test('hello with only a name', () => {
 		expect(hello({ name: 'Swift Otter' })).toEqual({
 			type: 'hello',
-			clientId: undefined,
-			sessionToken: undefined,
 			name: 'Swift Otter',
 		});
 	});
 
 	test('welcome carries clientId, sessionToken, and name', () => {
-		expect(welcome({ clientId: 'c1', sessionToken: 't1', name: 'Swift Otter' })).toEqual({
+		expect(welcome({ name: 'Swift Otter' })).toEqual({
 			type: 'welcome',
-			clientId: 'c1',
-			sessionToken: 't1',
 			name: 'Swift Otter',
 		});
 	});
@@ -103,9 +97,7 @@ describe('encode / decode', () => {
 	test('encode produces JSON text', () => {
 		const text = encode(hello({ name: 'Swift Otter' }));
 		expect(typeof text).toBe('string');
-		expect(JSON.parse(text)).toEqual({
-			type: 'hello', clientId: undefined, sessionToken: undefined, name: 'Swift Otter',
-		});
+		expect(JSON.parse(text)).toEqual({ type: 'hello', name: 'Swift Otter' });
 	});
 
 	test('decode round-trips a valid message', () => {
@@ -115,14 +107,6 @@ describe('encode / decode', () => {
 
 	test('decode throws ProtocolError on non-JSON', () => {
 		expect(() => decode('not json at all')).toThrow(ProtocolError);
-	});
-
-	test('decode throws ProtocolError on missing type', () => {
-		expect(() => decode(JSON.stringify({ no: 'type' }))).toThrow(ProtocolError);
-	});
-
-	test('decode throws ProtocolError on non-string type', () => {
-		expect(() => decode(JSON.stringify({ type: 42 }))).toThrow(ProtocolError);
 	});
 
 	test('ProtocolError carries a code', () => {

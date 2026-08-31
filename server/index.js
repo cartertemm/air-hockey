@@ -2,7 +2,9 @@ import https from 'node:https';
 import fs from 'node:fs';
 import { WebSocketServer } from 'ws';
 import { CONFIG } from './config.js';
-import { handleConnection } from './handshake.js';
+import { createServer } from 'audiogame-utils/net/server';
+import { codec } from '../network/transport.js';
+import { attachHandlers } from './handshake.js';
 
 function readCertsOrExit() {
 	if (!fs.existsSync(CONFIG.CERT_PATH) || !fs.existsSync(CONFIG.KEY_PATH)) {
@@ -15,12 +17,15 @@ function readCertsOrExit() {
 	};
 }
 
+const game = createServer({ codec });
+attachHandlers(game);
+
 const tls = readCertsOrExit();
 const server = https.createServer(tls);
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', socket => {
-	handleConnection(socket);
+	game.accept(socket);
 });
 
 server.listen(CONFIG.PORT, CONFIG.HOST, () => {
@@ -29,6 +34,7 @@ server.listen(CONFIG.PORT, CONFIG.HOST, () => {
 
 function shutdown() {
 	console.log('[server] shutting down');
+	game.close();
 	wss.close();
 	server.close(() => process.exit(0));
 	setTimeout(() => process.exit(1), 2000).unref();

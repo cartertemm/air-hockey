@@ -1,5 +1,4 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { Player, _resetPlayers } from '../server/player.js';
 import {
 	Room,
 	RoomError,
@@ -12,28 +11,31 @@ import {
 } from '../server/room.js';
 import { MSG, ERR } from '../network/protocol.js';
 
-function mockSocket() {
-	return { sent: [], send(msg) { this.sent.push(msg); }, close() {} };
-}
-
 function makePlayer(id, name = 'p' + id) {
-	return new Player({ clientId: id, sessionToken: 't' + id, name, socket: mockSocket() });
+	return {
+		id,
+		connected: true,
+		data: { name, room: null },
+		groups: new Set(),
+		sent: [],
+		send(msg) { this.sent.push(msg); },
+		close() { this.connected = false; },
+	};
 }
 
 function sentTypes(player) {
-	return player.socket.sent.map(m => m.type);
+	return player.sent.map(m => m.type);
 }
 
 beforeEach(() => {
 	_resetRooms();
-	_resetPlayers();
 });
 
 describe('createRoom', () => {
-	test('mints an id, sets host.room, broadcasts room:state to host', () => {
+	test('mints an id, sets host.data.room, broadcasts room:state to host', () => {
 		const host = makePlayer('h');
 		const room = createRoom(host, { mode: 'bestOf3', pointLimit: 11 });
-		expect(host.room).toBe(room);
+		expect(host.data.room).toBe(room);
 		expect(room.phase).toBe('waiting');
 		expect(room.mode).toBe('bestOf3');
 		expect(room.pointLimit).toBe(11);
@@ -51,7 +53,7 @@ describe('createRoom', () => {
 	test('broadcasts a lobby update to subscribers', () => {
 		const watcher = makePlayer('w');
 		subscribeLobby(watcher);
-		watcher.socket.sent.length = 0; // drop the initial snapshot
+		watcher.sent.length = 0; // drop the initial snapshot
 		createRoom(makePlayer('h'), { mode: 'single', pointLimit: 7 });
 		expect(sentTypes(watcher)).toContain(MSG.LOBBY_UPDATE);
 	});
@@ -64,13 +66,13 @@ describe('addMember', () => {
 		const watcher = makePlayer('w');
 		const room = createRoom(host, { mode: 'single', pointLimit: 7 });
 		subscribeLobby(watcher);
-		host.socket.sent.length = 0;
-		watcher.socket.sent.length = 0;
+		host.sent.length = 0;
+		watcher.sent.length = 0;
 
 		room.addMember(joiner);
 
 		expect(room.members).toEqual([host, joiner]);
-		expect(joiner.room).toBe(room);
+		expect(joiner.data.room).toBe(room);
 		expect(sentTypes(host)).toContain(MSG.ROOM_STATE);
 		expect(sentTypes(joiner)).toContain(MSG.ROOM_STATE);
 		expect(sentTypes(watcher)).toContain(MSG.LOBBY_UPDATE);
@@ -132,8 +134,8 @@ describe('setReady / setConfirmed / countdown', () => {
 		const [h] = room.members;
 		room.setReady(h, true);
 		room.setReady(j, true);
-		h.socket.sent.length = 0;
-		j.socket.sent.length = 0;
+		h.sent.length = 0;
+		j.sent.length = 0;
 		room.setConfirmed(h);
 		expect(room.phase).toBe('ready');
 		expect(room.game).toBeNull();
@@ -197,9 +199,9 @@ describe('removeMember', () => {
 		const joiner = makePlayer('j', 'Bob');
 		const room = createRoom(host, { mode: 'single', pointLimit: 7 });
 		room.addMember(joiner);
-		host.socket.sent.length = 0;
+		host.sent.length = 0;
 		room.removeMember(joiner, { disconnected: true });
-		const state = host.socket.sent.find(m => m.type === MSG.ROOM_STATE);
+		const state = host.sent.find(m => m.type === MSG.ROOM_STATE);
 		expect(state.room.lastEventMessage).toBe('Bob has disconnected.');
 	});
 
@@ -208,9 +210,9 @@ describe('removeMember', () => {
 		const joiner = makePlayer('j', 'Bob');
 		const room = createRoom(host, { mode: 'single', pointLimit: 7 });
 		room.addMember(joiner);
-		host.socket.sent.length = 0;
+		host.sent.length = 0;
 		room.removeMember(joiner);
-		const state = host.socket.sent.find(m => m.type === MSG.ROOM_STATE);
+		const state = host.sent.find(m => m.type === MSG.ROOM_STATE);
 		expect(state.room.lastEventMessage).toBeNull();
 	});
 
@@ -227,7 +229,7 @@ describe('lobby subscriptions', () => {
 		const room = createRoom(makePlayer('h'), { mode: 'single', pointLimit: 7 });
 		const watcher = makePlayer('w');
 		subscribeLobby(watcher);
-		const last = watcher.socket.sent.at(-1);
+		const last = watcher.sent.at(-1);
 		expect(last.type).toBe(MSG.LOBBY_UPDATE);
 		expect(last.full).toBe(true);
 		expect(last.rooms.map(r => r.id)).toContain(room.id);
@@ -237,7 +239,7 @@ describe('lobby subscriptions', () => {
 		const watcher = makePlayer('w');
 		subscribeLobby(watcher);
 		unsubscribeLobby(watcher);
-		watcher.socket.sent.length = 0;
+		watcher.sent.length = 0;
 		createRoom(makePlayer('h'), { mode: 'single', pointLimit: 7 });
 		expect(sentTypes(watcher)).not.toContain(MSG.LOBBY_UPDATE);
 	});

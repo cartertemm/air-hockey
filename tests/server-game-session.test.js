@@ -4,7 +4,10 @@ import { MSG } from '../network/protocol.js';
 import { MALLET_RADIUS, TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
 import { State } from '../src/stateMachine.js';
 import { Room, _resetRooms } from '../server/room.js';
-import { Player, _resetPlayers } from '../server/player.js';
+
+function makePlayer(id, name) {
+	return { id, connected: true, data: { name, room: null }, groups: new Set(), sent: [], send(msg) { this.sent.push(msg); }, close() { this.connected = false; } };
+}
 
 function makeFakePlayer(clientId) {
 	return { clientId, sent: [], send(msg) { this.sent.push(msg); } };
@@ -19,7 +22,6 @@ function makeSession() {
 
 beforeEach(() => {
 	_resetRooms();
-	_resetPlayers();
 });
 
 describe('GameSession input', () => {
@@ -237,8 +239,8 @@ describe('GameSession pause', () => {
 
 describe('Room ↔ GameSession wiring', () => {
 	test('host confirm plus guest confirm starts a GameSession and phase becomes playing', () => {
-		const p1 = new Player({ clientId: '1', sessionToken: 'x', name: 'a', socket: { send() {} } });
-		const p2 = new Player({ clientId: '2', sessionToken: 'y', name: 'b', socket: { send() {} } });
+		const p1 = makePlayer('1', 'a');
+		const p2 = makePlayer('2', 'b');
 		const room = new Room({ id: 'r1', host: p1, mode: 'singleMatch', pointLimit: 7 });
 		room.addMember(p2);
 		room.setReady(p1, true);
@@ -251,8 +253,8 @@ describe('Room ↔ GameSession wiring', () => {
 	});
 
 	test('match end resets room to waiting and clears ready/confirmed', () => {
-		const p1 = new Player({ clientId: '1', sessionToken: 'x', name: 'a', socket: { send() {} } });
-		const p2 = new Player({ clientId: '2', sessionToken: 'y', name: 'b', socket: { send() {} } });
+		const p1 = makePlayer('1', 'a');
+		const p2 = makePlayer('2', 'b');
 		const room = new Room({ id: 'r1', host: p1, mode: 'singleMatch', pointLimit: 1 });
 		room.addMember(p2);
 		room.setReady(p1, true);
@@ -267,8 +269,8 @@ describe('Room ↔ GameSession wiring', () => {
 	});
 
 	test('disconnect mid-match tears down the session', () => {
-		const p1 = new Player({ clientId: '1', sessionToken: 'x', name: 'a', socket: { send() {} } });
-		const p2 = new Player({ clientId: '2', sessionToken: 'y', name: 'b', socket: { send() {} } });
+		const p1 = makePlayer('1', 'a');
+		const p2 = makePlayer('2', 'b');
 		const room = new Room({ id: 'r1', host: p1, mode: 'singleMatch', pointLimit: 7 });
 		room.addMember(p2);
 		room.setReady(p1, true);

@@ -6,6 +6,16 @@ const NOUNS      = ['otter', 'falcon', 'comet', 'ember', 'river', 'spark'];
 
 // ---- Room instances ------------------------------------------------------
 
+function memberSnapshot(player, room) {
+	return {
+		clientId: player.id,
+		name: player.data.name,
+		ready: room.isReady(player),
+		confirmed: room.isConfirmed(player),
+		connected: player.connected,
+	};
+}
+
 export class Room {
 	constructor({ id, host, mode, pointLimit }) {
 		this.id = id;
@@ -18,7 +28,7 @@ export class Room {
 		this.confirmed = new WeakSet();
 		this.startRequested = false;
 		this.createdAt = Date.now();
-		host.room = this;
+		host.data.room = this;
 		this.game = null;
 	}
 
@@ -26,18 +36,18 @@ export class Room {
 		if (this.isFull())            throw new RoomError(ERR.ROOM_FULL);
 		if (this.phase !== 'waiting') throw new RoomError(ERR.ROOM_NOT_JOINABLE);
 		this.members.push(player);
-		player.room = this;
+		player.data.room = this;
 		this.broadcastState();
 		broadcastLobbyUpdate();
 	}
 
 	removeMember(player, { disconnected = false } = {}) {
-		const announcement = disconnected ? `${player.name} has disconnected.` : null;
+		const announcement = disconnected ? `${player.data.name} has disconnected.` : null;
 		this.members = this.members.filter(m => m !== player);
 		this.ready.delete(player);
 		this.confirmed.delete(player);
 		this.startRequested = false;
-		player.room = null;
+		player.data.room = null;
 		if (this.game) {
 			this.game.stopRealTimeLoop();
 			this.game = null;
@@ -98,7 +108,7 @@ export class Room {
 			mode: this.mode,
 			pointLimit: this.pointLimit,
 			phase: this.phase,
-			members: this.members.map(m => m.toMemberSnapshot()),
+			members: this.members.map(m => memberSnapshot(m, this)),
 			createdAt: this.createdAt,
 			lastEventMessage: eventMessage,
 		};
@@ -107,7 +117,7 @@ export class Room {
 	summary() {
 		return {
 			id: this.id,
-			hostName: this.host.name,
+			hostName: this.host.data.name,
 			mode: this.mode,
 			pointLimit: this.pointLimit,
 			memberCount: this.members.length,

@@ -8,6 +8,8 @@ import { encode, decode } from './protocol.js';
 // nor the server has to pass a codec at every call site.
 const codec = { encode, decode };
 
+export { codec };
+
 export function wrapSocket(socket, options = {}) {
 	return wrapSocketWithCodec(socket, { codec, ...options });
 }

@@ -1,18 +1,4 @@
-import { wrapSocket } from '../network/transport.js';
-
-const HELLO_TIMEOUT_MS = 5000;
-import {
-	MSG,
-	ERR,
-	welcome,
-	error as errorMsg,
-} from '../network/protocol.js';
-import {
-	Player,
-	register,
-	unregister,
-	generateSecret,
-} from './player.js';
+import { MSG, ERR, welcome, error as errorMsg } from '../network/protocol.js';
 import {
 	RoomError,
 	createRoom,
@@ -21,116 +7,97 @@ import {
 	unsubscribeLobby,
 } from './room.js';
 
-export function handleConnection(rawSocket) {
-	let player = null;
-	let wrapped = null;
-	let helloTimer = null;
+const HELLO_TIMEOUT_MS = 5000;
 
-	function clearHelloTimer() {
-		if (helloTimer !== null) {
-			clearTimeout(helloTimer);
-			helloTimer = null;
+function sendError(player, code, message = code) {
+	player.send(errorMsg({ code, message }));
+}
+
+function role(player) {
+	return player.data.room.members[0] === player ? 'p1' : 'p2';
+}
+
+function dispatch(player, msg) {
+	const room = player.data.room;
+	switch (msg.type) {
+		case MSG.ROOM_CREATE:
+			createRoom(player, { mode: msg.mode, pointLimit: msg.pointLimit });
+			break;
+		case MSG.ROOM_JOIN: {
+			const target = getRoom(msg.roomId);
+			if (!target) throw new RoomError(ERR.ROOM_NOT_FOUND);
+			target.addMember(player);
+			break;
 		}
+		case MSG.ROOM_LEAVE:
+			room?.removeMember(player);
+			break;
+		case MSG.ROOM_READY:
+			room?.setReady(player, true);
+			break;
+		case MSG.ROOM_UNREADY:
+			room?.setReady(player, false);
+			break;
+		case MSG.ROOM_CONFIRM:
+			room?.setConfirmed(player);
+			break;
+		case MSG.INPUT:
+			room?.game?.applyInput(role(player), { x: msg.x, y: msg.y, onTable: !!msg.onTable });
+			break;
+		case MSG.PAUSE_TOGGLE:
+			if (room?.game) room.game.togglePause(role(player), player.data.name);
+			break;
+		case MSG.SCORE_READOUT:
+			break;
+		case MSG.LOBBY_SUBSCRIBE:
+			subscribeLobby(player);
+			break;
+		case MSG.LOBBY_UNSUBSCRIBE:
+			unsubscribeLobby(player);
+			break;
+		default:
+			sendError(player, ERR.BAD_MESSAGE, `unknown type ${msg.type}`);
 	}
+}
 
-	function sendError(code, message = code) {
-		wrapped?.send(errorMsg({ code, message }));
-	}
-
-	// Every HELLO mints a fresh Player. The client may send a stored
-	// clientId/sessionToken from a prior welcome — we ignore them. When
-	// real mid-game reconnect is needed, it will live in Room, not here.
-	function handleHello(msg) {
-		clearHelloTimer();
-		if (msg.type !== MSG.HELLO) {
-			sendError(ERR.BAD_MESSAGE, 'expected hello');
-			wrapped.close();
+export function attachHandlers(game) {
+	game.on('connection', (player) => {
+		player.data.name = null;
+		player.data.room = null;
+		player.data.helloTimer = setTimeout(() => {
+			if (!player.data.name) player.close();
+		}, HELLO_TIMEOUT_MS);
+		player.data.helloTimer?.unref?.();
+	});
+	game.on('message', (player, msg) => {
+		if (!msg || typeof msg.type !== 'string') {
+			sendError(player, ERR.BAD_MESSAGE);
+			player.close();
 			return;
 		}
-		player = new Player({
-			clientId:     generateSecret(),
-			sessionToken: generateSecret(),
-			name:         msg.name || 'anonymous',
-			socket:       wrapped,
-		});
-		register(player);
-		wrapped.send(welcome({
-			clientId: player.clientId,
-			sessionToken: player.sessionToken,
-			name: player.name,
-		}));
-	}
-
-	function dispatch(msg) {
-		switch (msg.type) {
-			case MSG.ROOM_CREATE:
-				createRoom(player, { mode: msg.mode, pointLimit: msg.pointLimit });
-				break;
-			case MSG.ROOM_JOIN: {
-				const room = getRoom(msg.roomId);
-				if (!room) { sendError(ERR.ROOM_NOT_FOUND); break; }
-				room.addMember(player);
-				break;
+		if (!player.data.name) {
+			if (msg.type !== MSG.HELLO) {
+				sendError(player, ERR.BAD_MESSAGE, 'expected hello');
+				player.close();
+				return;
 			}
-			case MSG.ROOM_LEAVE:
-				player.room?.removeMember(player);
-				break;
-			case MSG.ROOM_READY:
-				player.room?.setReady(player, true);
-				break;
-			case MSG.ROOM_UNREADY:
-				player.room?.setReady(player, false);
-				break;
-			case MSG.ROOM_CONFIRM:
-				player.room?.setConfirmed(player);
-				break;
-			case MSG.INPUT:
-				player.room?.game?.applyInput(
-					player.room.members[0] === player ? 'p1' : 'p2',
-					{ x: msg.x, y: msg.y, onTable: !!msg.onTable },
-				);
-				break;
-			case MSG.PAUSE_TOGGLE:
-				if (player.room?.game) {
-					const role = player.room.members[0] === player ? 'p1' : 'p2';
-					player.room.game.togglePause(role, player.name);
-				}
-				break;
-			case MSG.SCORE_READOUT:
-				break;
-			case MSG.LOBBY_SUBSCRIBE:
-				subscribeLobby(player);
-				break;
-			case MSG.LOBBY_UNSUBSCRIBE:
-				unsubscribeLobby(player);
-				break;
-			default:
-				sendError(ERR.BAD_MESSAGE, `unknown type ${msg.type}`);
+			clearTimeout(player.data.helloTimer);
+			player.data.name = msg.name || 'anonymous';
+			player.send(welcome({ name: player.data.name }));
+			return;
 		}
-	}
-
-	function onMessage(msg) {
-		if (!player) { handleHello(msg); return; }
 		try {
-			dispatch(msg);
+			dispatch(player, msg);
 		} catch (err) {
-			if (err instanceof RoomError) sendError(err.code);
-			else throw err;
+			if (!(err instanceof RoomError)) throw err;
+			sendError(player, err.code);
 		}
-	}
-
-	function onClose() {
-		clearHelloTimer();
-		if (!player) return;
+	});
+	game.on('disconnect', (player) => {
+		clearTimeout(player.data.helloTimer);
 		unsubscribeLobby(player);
-		player.socket = null;
-		player.room?.removeMember(player, { disconnected: true });
-		unregister(player);
-	}
-
-	wrapped = wrapSocket(rawSocket, { onMessage, onClose, onError: () => {} });
-	helloTimer = setTimeout(() => {
-		if (!player) wrapped.close();
-	}, HELLO_TIMEOUT_MS);
-	helloTimer?.unref?.();
+		player.data.room?.removeMember(player, { disconnected: true });
+		player.close();
+	});
+	game.on('error', (err) => console.error('[server]', err));
 }

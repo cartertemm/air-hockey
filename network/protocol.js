@@ -42,8 +42,8 @@ export class ProtocolError extends Error {
 
 // ---- Client -> Server factories -----------------------------------------
 
-export function hello({ clientId, sessionToken, name }) {
-	return { type: MSG.HELLO, clientId, sessionToken, name };
+export function hello({ name }) {
+	return { type: MSG.HELLO, name };
 }
 
 export function lobbySubscribe() {
@@ -80,8 +80,8 @@ export function roomConfirm() {
 
 // ---- Server -> Client factories -----------------------------------------
 
-export function welcome({ clientId, sessionToken, name }) {
-	return { type: MSG.WELCOME, clientId, sessionToken, name };
+export function welcome({ name }) {
+	return { type: MSG.WELCOME, name };
 }
 
 export function roomState({ room }) {
@@ -133,14 +133,9 @@ export function encode(msg) {
 }
 
 export function decode(text) {
-	let msg;
 	try {
-		msg = JSON.parse(text);
+		return JSON.parse(text);
 	} catch {
 		throw new ProtocolError(ERR.BAD_MESSAGE, 'invalid JSON');
 	}
-	if (!msg || typeof msg.type !== 'string') {
-		throw new ProtocolError(ERR.BAD_MESSAGE, 'missing or non-string type');
-	}
-	return msg;
 }

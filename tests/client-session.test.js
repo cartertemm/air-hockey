@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { startSession } from '../src/session.js';
-import { setIdentityFromWelcome, getIdentity, clearIdentity } from '../src/identity.js';
+import { identity, setDisplayName, getIdentity, clearIdentity } from '../src/identity.js';
 import { getSpeechMode, setSpeechMode, getRate, getPitch, getVoice, SPEECH_MODE_TTS } from '../src/speech.js';
 import { MSG, ERR } from 'network/protocol.js';
 import * as settings from '../src/settings.js';
@@ -53,6 +53,14 @@ function makeAsyncFakeClient() {
 	return factory;
 }
 
+// The library handshake mints the clientId and session token on its own
+// channel, out of sight of onMessage. The fake client has no such channel, so
+// the test stores them the way the library would before the app-level welcome.
+function fireWelcome(factory, { clientId, sessionToken, name, resumed }) {
+	identity.set({ clientId, sessionToken });
+	factory.fireMessage({ type: MSG.WELCOME, name, resumed });
+}
+
 function setupRoot() {
 	const root = document.createElement('main');
 	document.body.appendChild(root);
@@ -95,7 +103,7 @@ describe('session: iOS install prompt', () => {
 
 	test('skipped when running as iOS standalone', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({
 			root,
 			createClient: makeFakeClient(),
@@ -142,7 +150,7 @@ describe('session: iOS install prompt', () => {
 	});
 
 	test('Continue sets the flag and routes to offline menu when name is stored', () => {
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const root = setupRoot();
 		startSession({
 			root,
@@ -166,7 +174,7 @@ describe('session: first load', () => {
 
 	test('stored name -> offline main menu', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'Swift Otter' });
+		setDisplayName('Swift Otter');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		expect(root.querySelector('h1').textContent).toBe('Welcome, Swift Otter');
 		const labels = [...root.querySelectorAll('button')].map(b => b.textContent);
@@ -175,7 +183,7 @@ describe('session: first load', () => {
 
 	test('no net-client is created until the user clicks Connect', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		let built = 0;
 		const factory = (h) => { built++; return makeFakeClient()(h); };
 		startSession({ root, createClient: factory, isIOS: () => false });
@@ -205,7 +213,7 @@ describe('session: name entry', () => {
 describe('session: connect flow', () => {
 	test('Connect button creates a client and transitions to connecting', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect to server
@@ -214,16 +222,13 @@ describe('session: connect flow', () => {
 
 	test('welcome transitions to online main menu and persists identity', async () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
 		await Promise.resolve();
 		// onOpen has fired, which sends hello. Now simulate welcome.
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
-		});
+		fireWelcome(factory, { clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false });
 		const labels = [...root.querySelectorAll('button')].map(b => b.textContent);
 		expect(labels).toEqual([
 			'Create game', 'Join game', 'Test speakers', 'Configure settings', 'Disconnect',
@@ -232,7 +237,7 @@ describe('session: connect flow', () => {
 
 	test('first socket close before welcome -> connectFailed', async () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click();
@@ -243,27 +248,21 @@ describe('session: connect flow', () => {
 
 	test('second welcome updates identity but does not re-render the online menu', async () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
 		await Promise.resolve();
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
-		});
+		fireWelcome(factory, { clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false });
 		const headingBefore = root.querySelector('h1');
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c1', sessionToken: 't2', name: 'A', resumed: true,
-		});
+		fireWelcome(factory, { clientId: 'c1', sessionToken: 't2', name: 'A', resumed: true });
 		const headingAfter = root.querySelector('h1');
 		expect(headingAfter).toBe(headingBefore);
 	});
 
 	test('Cancel during connecting returns to offline main menu', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
@@ -277,15 +276,12 @@ describe('session: connect flow', () => {
 describe('session: async close timing (regression)', () => {
 	test('Disconnect does not flash connectFailed when close fires asynchronously', async () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeAsyncFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
 		await Promise.resolve(); // let onOpen drain
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
-		});
+		fireWelcome(factory, { clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false });
 		const disconnect = [...root.querySelectorAll('button')].find(b => b.textContent === 'Disconnect');
 		disconnect.click();
 		// Drain any deferred onClose microtasks
@@ -299,7 +295,7 @@ describe('session: async close timing (regression)', () => {
 
 	test('Cancel during connecting does not flash connectFailed when close fires asynchronously', async () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeAsyncFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
@@ -315,7 +311,7 @@ describe('session: async close timing (regression)', () => {
 describe('session: offline stub screens', () => {
 	test('Test speakers screen mentions left/right and returns to offline menu', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		const testSpeakers = [...root.querySelectorAll('button')].find(b => b.textContent === 'Test speakers');
 		testSpeakers.click();
@@ -339,7 +335,7 @@ function dispatchEscape(root) {
 describe('session: Escape goes back', () => {
 	test('Escape on Test speakers returns to offline menu', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Test speakers').click();
 		expect(root.querySelector('h1').textContent).toBe('Test speakers');
@@ -349,7 +345,7 @@ describe('session: Escape goes back', () => {
 
 	test('Escape on Configure settings returns to offline menu', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Configure settings').click();
 		expect(root.querySelector('h1').textContent).toBe('Configure settings');
@@ -359,7 +355,7 @@ describe('session: Escape goes back', () => {
 
 	test('Escape during connecting cancels and returns to offline menu', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
@@ -371,7 +367,7 @@ describe('session: Escape goes back', () => {
 
 	test('Escape on connectFailed returns to offline menu', async () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
@@ -384,7 +380,7 @@ describe('session: Escape goes back', () => {
 
 	test('Escape on the offline main menu does nothing', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		expect(root.querySelector('h1').textContent).toBe('Welcome, A');
 		dispatchEscape(root);
@@ -393,7 +389,7 @@ describe('session: Escape goes back', () => {
 
 	test('Escape is ignored on iOS', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Test speakers').click();
 		expect(root.querySelector('h1').textContent).toBe('Test speakers');
@@ -411,7 +407,7 @@ describe('session: settings screen', () => {
 
 	test('opening settings from offline menu shows the settings screen with name field', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		expect(root.querySelector('h1').textContent).toBe('Configure settings');
@@ -421,7 +417,7 @@ describe('session: settings screen', () => {
 
 	test('Back button returns to the offline menu', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		[...root.querySelectorAll('button')].find(b => b.textContent === 'Back').click();
@@ -430,7 +426,7 @@ describe('session: settings screen', () => {
 
 	test('typing a name and blurring saves it via setDisplayName', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'Old' });
+		setDisplayName('Old');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		const input = root.querySelector('#settings-name');
@@ -441,7 +437,7 @@ describe('session: settings screen', () => {
 
 	test('blank name on blur is a no-op', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'Old' });
+		setDisplayName('Old');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		const input = root.querySelector('#settings-name');
@@ -452,7 +448,7 @@ describe('session: settings screen', () => {
 
 	test('Generate name button persists a random name and refocuses the input', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'Original' });
+		setDisplayName('Original');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		const input = root.querySelector('#settings-name');
@@ -467,7 +463,7 @@ describe('session: settings screen', () => {
 
 	test('switching to TTS on desktop reveals voice/rate/pitch controls and persists the mode', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => false });
 		openSettings(root);
 		expect(root.querySelector('#settings-voice')).toBeNull();
@@ -482,7 +478,7 @@ describe('session: settings screen', () => {
 
 	test('iOS opens settings without output mode radios', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		expect(root.querySelector('#settings-mode-aria')).toBeNull();
@@ -494,7 +490,7 @@ describe('session: settings screen', () => {
 
 	test('rate slider change persists via setRate', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		const slider = root.querySelector('#settings-rate');
@@ -505,7 +501,7 @@ describe('session: settings screen', () => {
 
 	test('pitch slider change persists via setPitch', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
 		const slider = root.querySelector('#settings-pitch');
@@ -516,7 +512,7 @@ describe('session: settings screen', () => {
 
 	test('voice select change persists via setVoice', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		globalThis.speechSynthesis.voices = [
 			{ name: 'Alpha', voiceURI: 'a' },
 			{ name: 'Beta',  voiceURI: 'b' },
@@ -531,7 +527,7 @@ describe('session: settings screen', () => {
 
 	test('Test voice button speaks one of the air hockey facts', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		// The Test voice button only appears once the user is in TTS mode, so
 		// match that invariant here (iOS session default would normally force
 		// TTS, but speech.js reads navigator.standalone directly rather than
@@ -546,7 +542,7 @@ describe('session: settings screen', () => {
 
 	test('voiceschanged event repopulates the voice select while on the settings screen', () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		globalThis.speechSynthesis.voices = [];
 		startSession({ root, createClient: makeFakeClient(), isIOS: () => true, isIOSStandalone: () => true });
 		openSettings(root);
@@ -566,15 +562,12 @@ describe('session: settings screen', () => {
 // ROOM_STATE snapshots can address the local member.
 async function openOnlineMenu({ isIOS = () => false, name = 'A', clientId = 'c1' } = {}) {
 	const root = setupRoot();
-	setIdentityFromWelcome({ clientId: null, sessionToken: null, name });
+	setDisplayName(name);
 	const factory = makeFakeClient();
 	startSession({ root, createClient: factory, isIOS });
 	root.querySelector('button').click(); // Connect
 	await Promise.resolve();
-	factory.fireMessage({
-		type: MSG.WELCOME,
-		clientId, sessionToken: 't1', name, resumed: false,
-	});
+	fireWelcome(factory, { clientId, sessionToken: 't1', name, resumed: false });
 	return { root, factory };
 }
 
@@ -835,7 +828,7 @@ describe('session: waiting room', () => {
 describe('session: handoff and countdown', () => {
 	test('clicking Continue on desktop handoff sends roomConfirm', async () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -849,10 +842,7 @@ describe('session: handoff and countdown', () => {
 		});
 		root.querySelector('button').click();
 		await Promise.resolve();
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
-		});
+		fireWelcome(factory, { clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false });
 		clickText(root, 'Create game');
 		clickText(root, 'Create');
 		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
@@ -874,7 +864,7 @@ describe('session: handoff and countdown', () => {
 	test('clicking Continue waits for gameplay preload before sending roomConfirm', async () => {
 		const preload = deferred();
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -884,10 +874,7 @@ describe('session: handoff and countdown', () => {
 		});
 		root.querySelector('button').click();
 		await Promise.resolve();
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
-		});
+		fireWelcome(factory, { clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false });
 		clickText(root, 'Create game');
 		clickText(root, 'Create');
 		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
@@ -939,7 +926,7 @@ describe('session: handoff and countdown', () => {
 	test('waiting player auto-confirms after gameplay preload finishes', async () => {
 		const preload = deferred();
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'B' });
+		setDisplayName('B');
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -949,10 +936,7 @@ describe('session: handoff and countdown', () => {
 		});
 		root.querySelector('button').click();
 		await Promise.resolve();
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c2', sessionToken: 't1', name: 'B', resumed: false,
-		});
+		fireWelcome(factory, { clientId: 'c2', sessionToken: 't1', name: 'B', resumed: false });
 		clickText(root, 'Create game');
 		clickText(root, 'Create');
 		factory.fireMessage({
@@ -987,7 +971,7 @@ describe('session: handoff and countdown', () => {
 
 	test('pressing Enter on desktop handoff sends roomConfirm', async () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -1001,10 +985,7 @@ describe('session: handoff and countdown', () => {
 		});
 		root.querySelector('button').click();
 		await Promise.resolve();
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
-		});
+		fireWelcome(factory, { clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false });
 		clickText(root, 'Create game');
 		clickText(root, 'Create');
 		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
@@ -1054,7 +1035,7 @@ describe('session: handoff and countdown', () => {
 			}
 		}
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -1071,10 +1052,7 @@ describe('session: handoff and countdown', () => {
 		});
 		root.querySelector('button').click();
 		await Promise.resolve();
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
-		});
+		fireWelcome(factory, { clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false });
 		clickText(root, 'Create game');
 		clickText(root, 'Create');
 		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
@@ -1137,7 +1115,7 @@ describe('session: handoff and countdown', () => {
 
 	test('iOS handoff shows the VoiceOver notice and Continue sends roomConfirm', async () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -1152,10 +1130,7 @@ describe('session: handoff and countdown', () => {
 		});
 		root.querySelector('button').click();
 		await Promise.resolve();
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
-		});
+		fireWelcome(factory, { clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false });
 		clickText(root, 'Create game');
 		clickText(root, 'Create');
 		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
@@ -1179,7 +1154,7 @@ describe('session: handoff and countdown', () => {
 	test('iOS handoff VoiceOver notice shows even when running in the browser (prompt dismissed)', async () => {
 		settings.set('pwaPromptDismissed', true);
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({
 			root,
@@ -1194,10 +1169,7 @@ describe('session: handoff and countdown', () => {
 		});
 		root.querySelector('button').click();
 		await Promise.resolve();
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
-		});
+		fireWelcome(factory, { clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false });
 		clickText(root, 'Create game');
 		clickText(root, 'Create');
 		factory.fireMessage({ type: MSG.ROOM_STATE, room: makeRoom() });
@@ -1219,15 +1191,12 @@ describe('session: handoff and countdown', () => {
 describe('session: disconnect', () => {
 	test('Disconnect tears down client and returns to offline main menu', async () => {
 		const root = setupRoot();
-		setIdentityFromWelcome({ clientId: null, sessionToken: null, name: 'A' });
+		setDisplayName('A');
 		const factory = makeFakeClient();
 		startSession({ root, createClient: factory, isIOS: () => false });
 		root.querySelector('button').click(); // Connect
 		await Promise.resolve();
-		factory.fireMessage({
-			type: MSG.WELCOME,
-			clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false,
-		});
+		fireWelcome(factory, { clientId: 'c1', sessionToken: 't1', name: 'A', resumed: false });
 		const disconnect = [...root.querySelectorAll('button')].find(b => b.textContent === 'Disconnect');
 		disconnect.click();
 		expect(factory.client.closeCalled).toBe(true);
