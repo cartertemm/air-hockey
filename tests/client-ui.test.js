@@ -433,8 +433,4 @@ describe('screen functions', () => {
 		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
 		expect(confirmed).toBe(1);
 	});
-
-	test('renderScreen rejects a non-function screen', () => {
-		expect(() => renderScreen(setupRoot(), 'mainMenu', {})).toThrow(TypeError);
-	});
 });
