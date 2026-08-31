@@ -1,6 +1,22 @@
 import { getIdentity, setIdentityFromWelcome, setDisplayName } from './identity.js';
 import { generateName } from './names.js';
-import { renderScreen } from './ui.js';
+import {
+	renderScreen,
+	installPwaIos,
+	nameEntry,
+	mainMenu,
+	connecting,
+	connectFailed,
+	createGame,
+	joinGame,
+	waitingRoom,
+	roomError,
+	gameplay,
+	handoffIos,
+	handoffDesktop,
+	testSpeakers,
+	settings as settingsScreen,
+} from './ui.js';
 import { createClient as realCreateClient } from './net/client.js';
 import { isIOS as isIOSPlatform, isIOSStandalone as isIOSStandaloneDefault } from './platform.js';
 import * as settings from './settings.js';
@@ -104,14 +120,14 @@ export function startSession({
 			go(name ? screenOfflineMenu() : screenNameEntry());
 		};
 		return {
-			screen: 'installPwaIos',
+			screen: installPwaIos,
 			props: { onContinue: proceed },
 		};
 	}
 
 	function screenNameEntry() {
 		return {
-			screen: 'nameEntry',
+			screen: nameEntry,
 			props: {
 				onSubmit: value => {
 					const name = value ?? generateName();
@@ -125,7 +141,7 @@ export function startSession({
 	function screenOfflineMenu() {
 		const { name } = getIdentity();
 		return {
-			screen: 'mainMenu',
+			screen: mainMenu,
 			props: {
 				name,
 				connected: false,
@@ -139,7 +155,7 @@ export function startSession({
 	function screenOnlineMenu() {
 		const { name } = getIdentity();
 		return {
-			screen: 'mainMenu',
+			screen: mainMenu,
 			props: {
 				name,
 				connected: true,
@@ -161,7 +177,7 @@ export function startSession({
 	function screenCreateGame() {
 		const cancel = () => go(screenOnlineMenu());
 		return {
-			screen: 'createGame',
+			screen: createGame,
 			props: {
 				onSubmit: ({ mode, pointLimit }) => {
 					client?.send(roomCreate({ mode, pointLimit }));
@@ -188,7 +204,7 @@ export function startSession({
 		const back = () => go(screenOnlineMenu());
 		client?.send(lobbySubscribe());
 		return {
-			screen: 'joinGame',
+			screen: joinGame,
 			props: {
 				rooms: [],
 				onReady: ({ update }) => { listUpdater = update; },
@@ -232,7 +248,7 @@ export function startSession({
 			go(screenOnlineMenu());
 		};
 		return {
-			screen: 'waitingRoom',
+			screen: waitingRoom,
 			props: {
 				room,
 				localReady,
@@ -272,7 +288,7 @@ export function startSession({
 		const me = findMe(room);
 		if (!canConfirm && !me?.confirmed) {
 			prepareGameplay().then(() => {
-				if (client && state?.screen === (isIOS() ? 'handoffIos' : 'handoffDesktop')) {
+				if (client && state?.screen === (isIOS() ? handoffIos : handoffDesktop)) {
 					client.send(roomConfirm());
 				}
 			}).catch((err) => {
@@ -280,7 +296,7 @@ export function startSession({
 			});
 		}
 		return {
-			screen: isIOS() ? 'handoffIos' : 'handoffDesktop',
+			screen: isIOS() ? handoffIos : handoffDesktop,
 			props: {
 				canConfirm,
 				onContinue: confirm,
@@ -342,7 +358,7 @@ export function startSession({
 			}
 		})();
 		return {
-			screen: 'gameplay',
+			screen: gameplay,
 			props: { roomId },
 			onDispose: () => {
 				disposed = true;
@@ -375,7 +391,7 @@ export function startSession({
 	function screenRoomError(code) {
 		const back = () => go(screenOnlineMenu());
 		return {
-			screen: 'roomError',
+			screen: roomError,
 			props: {
 				message: ROOM_ERROR_MESSAGES[code] ?? 'Unknown room error.',
 				onBack: back,
@@ -423,7 +439,7 @@ export function startSession({
 			c?.close();
 		};
 		return {
-			screen: 'connecting',
+			screen: connecting,
 			props: { onCancel: cancel },
 			onEscape: cancel,
 		};
@@ -437,7 +453,7 @@ export function startSession({
 			c?.close();
 		};
 		return {
-			screen: 'connectFailed',
+			screen: connectFailed,
 			props: {
 				onRetry: () => {
 					const c = client;
@@ -454,7 +470,7 @@ export function startSession({
 	function screenTestSpeakers(wasOnline) {
 		const back = () => go(wasOnline ? screenOnlineMenu() : screenOfflineMenu());
 		return {
-			screen: 'testSpeakers',
+			screen: testSpeakers,
 			props: {
 				onPlay: () => speakerTest.play(),
 				onBack: back,
@@ -476,7 +492,7 @@ export function startSession({
 			return () => speechSynthesis.removeEventListener('voiceschanged', wrapped);
 		};
 		return {
-			screen: 'settings',
+			screen: settingsScreen,
 			props: {
 				name: getIdentity().name ?? '',
 				isIOS: onIOS,

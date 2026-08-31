@@ -1,5 +1,21 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { renderScreen } from '../src/ui.js';
+import {
+	renderScreen,
+	installPwaIos,
+	nameEntry,
+	mainMenu,
+	connecting,
+	connectFailed,
+	createGame,
+	joinGame,
+	waitingRoom,
+	roomError,
+	gameplay,
+	handoffIos,
+	handoffDesktop,
+	testSpeakers,
+	settings,
+} from '../src/ui.js';
 
 function setupRoot() {
 	const root = document.createElement('main');
@@ -14,7 +30,7 @@ beforeEach(() => {
 describe('renderScreen', () => {
 	test('mounts a heading and a focused button', () => {
 		const root = setupRoot();
-		renderScreen(root, 'mainMenu', {
+		renderScreen(root, mainMenu, {
 			name: 'Swift Otter',
 			connected: false,
 			onConnect: () => {},
@@ -29,7 +45,7 @@ describe('renderScreen', () => {
 
 	test('mainMenu online mode shows Create/Join/Disconnect', () => {
 		const root = setupRoot();
-		renderScreen(root, 'mainMenu', {
+		renderScreen(root, mainMenu, {
 			name: 'Swift Otter',
 			connected: true,
 			onCreate: () => {}, onJoin: () => {},
@@ -44,7 +60,7 @@ describe('renderScreen', () => {
 	test('button click invokes the provided handler', () => {
 		const root = setupRoot();
 		let clicked = false;
-		renderScreen(root, 'mainMenu', {
+		renderScreen(root, mainMenu, {
 			name: 'x', connected: false,
 			onConnect: () => { clicked = true; },
 			onTestSpeakers: () => {}, onSettings: () => {},
@@ -56,7 +72,7 @@ describe('renderScreen', () => {
 	test('nameEntry: blank input calls onSubmit with null', () => {
 		const root = setupRoot();
 		let submitted;
-		renderScreen(root, 'nameEntry', { onSubmit: v => { submitted = v; } });
+		renderScreen(root, nameEntry, { onSubmit: v => { submitted = v; } });
 		root.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
 		expect(submitted).toBeNull();
 	});
@@ -64,7 +80,7 @@ describe('renderScreen', () => {
 	test('nameEntry: filled input calls onSubmit with the value', () => {
 		const root = setupRoot();
 		let submitted;
-		renderScreen(root, 'nameEntry', { onSubmit: v => { submitted = v; } });
+		renderScreen(root, nameEntry, { onSubmit: v => { submitted = v; } });
 		const input = root.querySelector('input');
 		input.value = 'Swift Otter';
 		root.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
@@ -73,7 +89,7 @@ describe('renderScreen', () => {
 
 	test('returned dispose() removes the rendered content', () => {
 		const root = setupRoot();
-		const { dispose } = renderScreen(root, 'connecting', { onCancel: () => {} });
+		const { dispose } = renderScreen(root, connecting, { onCancel: () => {} });
 		expect(root.childElementCount).toBeGreaterThan(0);
 		dispose();
 		expect(root.childElementCount).toBe(0);
@@ -83,7 +99,7 @@ describe('renderScreen', () => {
 		const root = setupRoot();
 		let retried = false;
 		let cancelled = false;
-		renderScreen(root, 'connectFailed', {
+		renderScreen(root, connectFailed, {
 			onRetry: () => { retried = true; },
 			onCancel: () => { cancelled = true; },
 		});
@@ -98,7 +114,7 @@ describe('renderScreen', () => {
 	test('handoffDesktop renders a Continue button and focuses it', () => {
 		const root = setupRoot();
 		let confirmed = 0;
-		renderScreen(root, 'handoffDesktop', {
+		renderScreen(root, handoffDesktop, {
 			canConfirm: true,
 			onConfirm: () => { confirmed++; },
 		});
@@ -113,7 +129,7 @@ describe('renderScreen', () => {
 
 	test('handoffDesktop hides Continue for the waiting player', () => {
 		const root = setupRoot();
-		renderScreen(root, 'handoffDesktop', {
+		renderScreen(root, handoffDesktop, {
 			canConfirm: false,
 			onConfirm: () => {},
 		});
@@ -148,7 +164,7 @@ function defaultSettingsProps(overrides = {}) {
 describe('settings screen', () => {
 	test('desktop with mode=aria shows name + radios + back, no voice controls', () => {
 		const root = setupRoot();
-		renderScreen(root, 'settings', defaultSettingsProps());
+		renderScreen(root, settings, defaultSettingsProps());
 		expect(root.querySelector('h1').textContent).toBe('Configure settings');
 		expect(root.querySelector('#settings-name')).toBeTruthy();
 		expect(root.querySelector('#settings-mode-aria')).toBeTruthy();
@@ -162,7 +178,7 @@ describe('settings screen', () => {
 
 	test('desktop with mode=tts shows voice controls and Test voice button', () => {
 		const root = setupRoot();
-		renderScreen(root, 'settings', defaultSettingsProps({ mode: 'tts' }));
+		renderScreen(root, settings, defaultSettingsProps({ mode: 'tts' }));
 		expect(root.querySelector('#settings-voice')).toBeTruthy();
 		expect(root.querySelector('#settings-rate')).toBeTruthy();
 		expect(root.querySelector('#settings-pitch')).toBeTruthy();
@@ -172,7 +188,7 @@ describe('settings screen', () => {
 
 	test('iOS always shows voice controls and hides output mode', () => {
 		const root = setupRoot();
-		renderScreen(root, 'settings', defaultSettingsProps({ isIOS: true, mode: 'tts' }));
+		renderScreen(root, settings, defaultSettingsProps({ isIOS: true, mode: 'tts' }));
 		expect(root.querySelector('#settings-mode-aria')).toBeNull();
 		expect(root.querySelector('#settings-mode-tts')).toBeNull();
 		expect(root.querySelector('#settings-voice')).toBeTruthy();
@@ -182,7 +198,7 @@ describe('settings screen', () => {
 
 	test('selected radio reflects current mode', () => {
 		const root = setupRoot();
-		renderScreen(root, 'settings', defaultSettingsProps({ mode: 'tts' }));
+		renderScreen(root, settings, defaultSettingsProps({ mode: 'tts' }));
 		expect(root.querySelector('#settings-mode-tts').checked).toBe(true);
 		expect(root.querySelector('#settings-mode-aria').checked).toBe(false);
 	});
@@ -190,7 +206,7 @@ describe('settings screen', () => {
 	test('changing the mode radio invokes onModeChange', () => {
 		const root = setupRoot();
 		const calls = [];
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			mode: 'aria',
 			onModeChange: (m) => calls.push(m),
 		}));
@@ -203,7 +219,7 @@ describe('settings screen', () => {
 	test('blurring the name input commits via onNameSave', () => {
 		const root = setupRoot();
 		const calls = [];
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			onNameSave: (v) => calls.push(v),
 		}));
 		const input = root.querySelector('#settings-name');
@@ -215,7 +231,7 @@ describe('settings screen', () => {
 	test('Enter on the name input commits without submitting a form', () => {
 		const root = setupRoot();
 		const calls = [];
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			onNameSave: (v) => calls.push(v),
 		}));
 		const input = root.querySelector('#settings-name');
@@ -230,7 +246,7 @@ describe('settings screen', () => {
 			{ name: 'Alpha', voiceURI: 'a' },
 			{ name: 'Beta',  voiceURI: 'b' },
 		];
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			isIOS: true,
 			voices,
 			voiceURI: 'b',
@@ -243,7 +259,7 @@ describe('settings screen', () => {
 
 	test('voice select shows an "(unknown voice)" placeholder when persisted voice is missing', () => {
 		const root = setupRoot();
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			isIOS: true,
 			voices: [{ name: 'Alpha', voiceURI: 'a' }],
 			voiceURI: 'gone',
@@ -256,7 +272,7 @@ describe('settings screen', () => {
 	test('changing the voice select invokes onVoiceChange with the new URI', () => {
 		const root = setupRoot();
 		const calls = [];
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			isIOS: true,
 			voices: [
 				{ name: 'Alpha', voiceURI: 'a' },
@@ -274,7 +290,7 @@ describe('settings screen', () => {
 	test('rate slider reads aria-valuetext and reports new values via onRateChange', () => {
 		const root = setupRoot();
 		const calls = [];
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			isIOS: true,
 			rate: 1,
 			onRateChange: (v) => calls.push(v),
@@ -290,7 +306,7 @@ describe('settings screen', () => {
 	test('pitch slider reports new values via onPitchChange', () => {
 		const root = setupRoot();
 		const calls = [];
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			isIOS: true,
 			pitch: 1,
 			onPitchChange: (v) => calls.push(v),
@@ -304,7 +320,7 @@ describe('settings screen', () => {
 	test('Test voice button invokes onTestVoice', () => {
 		const root = setupRoot();
 		let pressed = 0;
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			isIOS: true,
 			onTestVoice: () => { pressed++; },
 		}));
@@ -315,14 +331,14 @@ describe('settings screen', () => {
 
 	test('"Feeling indecisive?" text appears near the name field', () => {
 		const root = setupRoot();
-		renderScreen(root, 'settings', defaultSettingsProps());
+		renderScreen(root, settings, defaultSettingsProps());
 		expect(root.textContent).toMatch(/Feeling indecisive\?/);
 	});
 
 	test('Generate name button populates the input, saves, and refocuses it', () => {
 		const root = setupRoot();
 		const saved = [];
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			name: 'Old Name',
 			generateName: () => 'Shiny Puck',
 			onNameSave: (v) => saved.push(v),
@@ -338,7 +354,7 @@ describe('settings screen', () => {
 	test('Back button invokes onBack', () => {
 		const root = setupRoot();
 		let backed = 0;
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			onBack: () => { backed++; },
 		}));
 		const back = [...root.querySelectorAll('button')].find(b => b.textContent === 'Back');
@@ -348,7 +364,7 @@ describe('settings screen', () => {
 
 	test('focusField "mode-tts" focuses the TTS radio after mount', () => {
 		const root = setupRoot();
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			mode: 'tts',
 			focusField: 'mode-tts',
 		}));
@@ -362,7 +378,7 @@ describe('settings screen', () => {
 			pushHandler = handler;
 			return () => { pushHandler = null; };
 		};
-		renderScreen(root, 'settings', defaultSettingsProps({
+		renderScreen(root, settings, defaultSettingsProps({
 			isIOS: true,
 			voices: [],
 			subscribeVoicesChanged: subscribe,
@@ -381,12 +397,44 @@ describe('settings screen', () => {
 		let subscribed = 0;
 		let unsubscribed = 0;
 		const subscribe = () => { subscribed++; return () => { unsubscribed++; }; };
-		const { dispose } = renderScreen(root, 'settings', defaultSettingsProps({
+		const { dispose } = renderScreen(root, settings, defaultSettingsProps({
 			isIOS: true,
 			subscribeVoicesChanged: subscribe,
 		}));
 		expect(subscribed).toBe(1);
 		dispose();
 		expect(unsubscribed).toBe(1);
+	});
+});
+
+describe('screen functions', () => {
+	test('renderScreen takes a screen function', () => {
+		const root = setupRoot();
+		renderScreen(root, mainMenu, {
+			name: 'Swift Otter',
+			connected: false,
+			onConnect: () => {},
+			onTestSpeakers: () => {},
+			onSettings: () => {},
+		});
+		expect(root.querySelector('h1').textContent).toBe('Welcome, Swift Otter');
+	});
+
+	test('handoffDesktop removes its keydown listener on dispose', () => {
+		const root = setupRoot();
+		let confirmed = 0;
+		const screen = renderScreen(root, handoffDesktop, {
+			canConfirm: true,
+			onConfirm: () => { confirmed += 1; },
+		});
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+		expect(confirmed).toBe(1);
+		screen.dispose();
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+		expect(confirmed).toBe(1);
+	});
+
+	test('renderScreen rejects a non-function screen', () => {
+		expect(() => renderScreen(setupRoot(), 'mainMenu', {})).toThrow(TypeError);
 	});
 });
