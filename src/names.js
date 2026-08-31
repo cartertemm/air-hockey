@@ -1,3 +1,5 @@
+import { random_choice } from 'audiogame-utils/math';
+
 const ADJECTIVES = [
 	'Swift',   'Brave',   'Quiet',   'Bright',  'Calm',    'Wild',
 	'Bold',    'Sharp',   'Clever',  'Noble',   'Lucky',   'Merry',
@@ -39,7 +41,5 @@ const NOUNS = [
 ];
 
 export function generateName() {
-	const a = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-	const n = NOUNS[Math.floor(Math.random() * NOUNS.length)];
-	return `${a} ${n}`;
+	return `${random_choice(ADJECTIVES)} ${random_choice(NOUNS)}`;
 }

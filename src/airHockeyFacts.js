@@ -1,3 +1,5 @@
+import { random_choice } from 'audiogame-utils/math';
+
 // One-sentence facts about air hockey, sourced from
 // https://en.wikipedia.org/wiki/Air_hockey. Used by the Settings screen's
 // "Test voice" button so the user hears something interesting (and varies
@@ -32,6 +34,5 @@ export const AIR_HOCKEY_FACTS = [
 ];
 
 export function randomFact() {
-	const i = Math.floor(Math.random() * AIR_HOCKEY_FACTS.length);
-	return AIR_HOCKEY_FACTS[i];
+	return random_choice(AIR_HOCKEY_FACTS);
 }

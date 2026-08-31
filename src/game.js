@@ -10,6 +10,7 @@ import { on as onMouse, off as offMouse } from './input/mouse.js';
 import { makeInputHandler } from './input/inputHandler.js';
 import { pauseToggleMsg } from '../network/protocol.js';
 import { speak } from './speech.js';
+import { clamp } from 'audiogame-utils/math';
 
 const HALF = TABLE_LENGTH / 2;
 const MALLET_SPEED_BASE = 24;
@@ -19,10 +20,6 @@ const Y_BOUNDS = {
 	p1: { min: MALLET_RADIUS, max: HALF },
 	p2: { min: HALF, max: TABLE_LENGTH - MALLET_RADIUS },
 };
-
-function clamp(v, lo, hi) {
-	return v < lo ? lo : v > hi ? hi : v;
-}
 
 export function screenToTable(screenX, screenY, player, screenW, screenH) {
 	const rx = screenX / screenW;

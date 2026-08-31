@@ -2,6 +2,7 @@ import { createPuck, createMallet, step as physicsStep, MALLET_RADIUS, TABLE_WID
 import { EventEmitter } from '../src/events.js';
 import { GameStateMachine, State } from '../src/stateMachine.js';
 import { gameStart, gameSnapshot, gameEnd } from '../network/protocol.js';
+import { clamp, random_float } from 'audiogame-utils/math';
 
 const COUNTDOWN_MS = 3000;
 const GOAL_HOLD_MS = 2000;
@@ -12,14 +13,6 @@ const Y_BOUNDS = {
 	p1: { min: MALLET_RADIUS, max: HALF },
 	p2: { min: HALF, max: TABLE_LENGTH - MALLET_RADIUS },
 };
-
-function clamp(v, lo, hi) {
-	return v < lo ? lo : v > hi ? hi : v;
-}
-
-function randomDrift() {
-	return (Math.random() * 2 - 1) * SERVE_DRIFT_MAX;
-}
 
 export class GameSession {
 	constructor({ p1, p2, pointLimit = 7, bestOf = 1, onEnd = null }) {
@@ -110,8 +103,8 @@ export class GameSession {
 		const puck = this.physicsState.puck;
 		puck.x = TABLE_WIDTH / 2;
 		puck.y = servingPlayer === 'p1' ? TABLE_LENGTH / 4 : (3 * TABLE_LENGTH) / 4;
-		puck.vx = randomDrift();
-		puck.vy = randomDrift();
+		puck.vx = random_float(-SERVE_DRIFT_MAX, SERVE_DRIFT_MAX);
+		puck.vy = random_float(-SERVE_DRIFT_MAX, SERVE_DRIFT_MAX);
 		puck.omega = 0;
 		puck.onTable = true;
 	}
