@@ -433,4 +433,14 @@ describe('screen functions', () => {
 		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
 		expect(confirmed).toBe(1);
 	});
+
+	test('installPwaIos keeps this app wording', () => {
+		const root = setupRoot();
+		renderScreen(root, installPwaIos, { onContinue: () => {} });
+		const paragraphs = [...root.querySelectorAll('p')].map(p => p.textContent);
+		expect(root.querySelector('h1').textContent).toBe('Install for the best experience');
+		expect(paragraphs[0]).toContain('address-bar clutter');
+		expect(paragraphs[1]).toContain('tap the More button followed by the Share button');
+		expect(root.querySelector('button').textContent).toBe('Continue anyway');
+	});
 });
