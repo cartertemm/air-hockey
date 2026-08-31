@@ -1,7 +1,8 @@
-import { sfx } from '../sfx.js';
+import { audio, sfx } from '../sfx.js';
 import { malletHitTier, wallBounceTier, goalTier } from './tiers.js';
 import { speak } from '../speech.js';
 import { TABLE_WIDTH, TABLE_LENGTH, MALLET_RADIUS } from '../physics.js';
+import { lerp, range_convert } from 'audiogame-utils/math';
 
 const defaultSounds = {
 	tableLoop:          sfx(() => import('../../sounds/table_loop.ogg?url')),
@@ -51,7 +52,7 @@ const VOL = {
 const DISTANCE_FALLOFF = 0.7;
 
 function panFor(localPlayer, tableX) {
-	const centered = (tableX - TABLE_WIDTH / 2) / (TABLE_WIDTH / 2);
+	const centered = range_convert(tableX, 0, TABLE_WIDTH, -1, 1);
 	return localPlayer === 'p1' ? centered : -centered;
 }
 
@@ -59,7 +60,7 @@ function distanceVolume(localPlayer, y) {
 	if (typeof y !== 'number') return 1;
 	const listenerY = localPlayer === 'p1' ? 0 : TABLE_LENGTH;
 	const norm = Math.min(1, Math.abs(y - listenerY) / TABLE_LENGTH);
-	return 1 - DISTANCE_FALLOFF * norm;
+	return lerp(1, 1 - DISTANCE_FALLOFF, norm);
 }
 
 function malletAtBorder(mallet, player) {
@@ -69,7 +70,7 @@ function malletAtBorder(mallet, player) {
 }
 
 export async function preloadGameAudio() {
-	await Promise.all(Object.values(defaultSounds).map(s => s.load()));
+	await audio.preload(Object.values(defaultSounds));
 }
 
 export function createGameAudio({ sounds = defaultSounds } = {}) {
