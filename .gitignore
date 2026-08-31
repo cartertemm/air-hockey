@@ -5,6 +5,7 @@ dist/
 .vite/
 coverage/
 docs/superpowers/
+.superpowers/
 dev-certs/*.pem
 .env
 .env.local
