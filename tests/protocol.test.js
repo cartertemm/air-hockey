@@ -50,14 +50,7 @@ describe('protocol constants', () => {
 });
 
 describe('protocol factories', () => {
-	test('hello with all fields', () => {
-		expect(hello({ name: 'Swift Otter' })).toEqual({
-			type: 'hello',
-			name: 'Swift Otter',
-		});
-	});
-
-	test('hello with only a name', () => {
+	test('hello carries only a name', () => {
 		expect(hello({ name: 'Swift Otter' })).toEqual({
 			type: 'hello',
 			name: 'Swift Otter',

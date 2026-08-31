@@ -4,6 +4,7 @@ import { MSG } from '../network/protocol.js';
 import { MALLET_RADIUS, TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
 import { State } from '../src/stateMachine.js';
 import { Room, initRooms, _resetRooms } from '../server/room.js';
+import { createServer } from 'audiogame-utils/net/server';
 
 function makePlayer(id, name) {
 	return { id, connected: true, data: { name, room: null }, groups: new Set(), sent: [], send(msg) { this.sent.push(msg); }, close() { this.connected = false; } };
@@ -20,33 +21,9 @@ function makeSession() {
 	return { p1, p2, session };
 }
 
-function makeFakeServer() {
-	const groups = new Map();
-	return {
-		groups,
-		group(name, { persist = false } = {}) {
-			let found = groups.get(name);
-			if (!found) {
-				found = {
-					name,
-					persist,
-					members: new Set(),
-					add(client) { this.members.add(client); client.groups.add(this); return this; },
-					remove(client) { this.members.delete(client); client.groups.delete(this); return this; },
-					send(msg) { for (const c of this.members) c.send(msg); },
-					close() { this.members.clear(); groups.delete(name); },
-					get clients() { return [...this.members]; },
-				};
-				groups.set(name, found);
-			}
-			return found;
-		},
-	};
-}
-
 beforeEach(() => {
 	_resetRooms();
-	initRooms(makeFakeServer());
+	initRooms(createServer());
 });
 
 describe('GameSession input', () => {

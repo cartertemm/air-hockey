@@ -11,6 +11,7 @@ import {
 	_resetRooms,
 } from '../server/room.js';
 import { MSG, ERR } from '../network/protocol.js';
+import { createServer } from 'audiogame-utils/net/server';
 
 function makePlayer(id, name = 'p' + id) {
 	return {
@@ -28,33 +29,9 @@ function sentTypes(player) {
 	return player.sent.map(m => m.type);
 }
 
-function makeFakeServer() {
-	const groups = new Map();
-	return {
-		groups,
-		group(name, { persist = false } = {}) {
-			let found = groups.get(name);
-			if (!found) {
-				found = {
-					name,
-					persist,
-					members: new Set(),
-					add(client) { this.members.add(client); client.groups.add(this); return this; },
-					remove(client) { this.members.delete(client); client.groups.delete(this); return this; },
-					send(msg) { for (const c of this.members) c.send(msg); },
-					close() { this.members.clear(); groups.delete(name); },
-					get clients() { return [...this.members]; },
-				};
-				groups.set(name, found);
-			}
-			return found;
-		},
-	};
-}
-
 beforeEach(() => {
 	_resetRooms();
-	initRooms(makeFakeServer());
+	initRooms(createServer());
 });
 
 describe('createRoom', () => {
