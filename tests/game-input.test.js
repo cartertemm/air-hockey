@@ -2,8 +2,19 @@ import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { Game, screenToTable } from '../src/game.js';
 import { initKeyboard } from '../src/input/keyboard.js';
 import { initMouse, disposeMouse } from '../src/input/mouse.js';
+import { initTouch, disposeTouch } from '../src/input/touch.js';
 import { MSG } from '../network/protocol.js';
 import { TABLE_WIDTH, TABLE_LENGTH } from '../src/physics.js';
+
+beforeEach(() => {
+	initTouch();
+	initMouse();
+});
+
+afterEach(() => {
+	disposeTouch();
+	disposeMouse();
+});
 
 function makeFakeSocket() {
 	const sent = [];
@@ -127,9 +138,6 @@ describe('Game input → socket integration', () => {
 });
 
 describe('Game mouse/touchpad input → socket integration', () => {
-	beforeEach(() => { initMouse(); });
-	afterEach(() => { disposeMouse(); });
-
 	test('mousedown sends INPUT with onTable=true', () => {
 		const socket = makeFakeSocket();
 		const game = new Game({ socket });

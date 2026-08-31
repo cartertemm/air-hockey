@@ -1,7 +1,19 @@
-import { describe, test, expect, vi } from 'vitest';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createGameClient } from '../src/net/gameClient.js';
 import { MSG } from '../network/protocol.js';
 import { Game } from '../src/game.js';
+import { initTouch, disposeTouch } from '../src/input/touch.js';
+import { initMouse, disposeMouse } from '../src/input/mouse.js';
+
+beforeEach(() => {
+	initTouch();
+	initMouse();
+});
+
+afterEach(() => {
+	disposeTouch();
+	disposeMouse();
+});
 
 function makeFakeSocket() {
 	const sent = [];
