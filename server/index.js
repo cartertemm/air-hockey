@@ -1,3 +1,4 @@
+import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import { WebSocketServer } from 'ws';
@@ -7,23 +8,23 @@ import { codec } from '../network/transport.js';
 import { attachHandlers } from './handshake.js';
 import { initRooms } from './room.js';
 
-function readCertsOrExit() {
+function createHttpServer() {
+	if (!CONFIG.SECURE) return http.createServer();
 	if (!fs.existsSync(CONFIG.CERT_PATH) || !fs.existsSync(CONFIG.KEY_PATH)) {
 		console.error(`Missing TLS cert/key. Run mkcert — see dev-certs/README.md.`);
 		process.exit(1);
 	}
-	return {
+	return https.createServer({
 		cert: fs.readFileSync(CONFIG.CERT_PATH),
 		key:  fs.readFileSync(CONFIG.KEY_PATH),
-	};
+	});
 }
 
 const game = createServer({ codec });
 initRooms(game);
 attachHandlers(game);
 
-const tls = readCertsOrExit();
-const server = https.createServer(tls);
+const server = createHttpServer();
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', socket => {
@@ -31,7 +32,7 @@ wss.on('connection', socket => {
 });
 
 server.listen(CONFIG.PORT, CONFIG.HOST, () => {
-	console.log(`[server] listening on wss://${CONFIG.HOST}:${CONFIG.PORT}`);
+	console.log(`[server] listening on ${CONFIG.SECURE ? 'wss' : 'ws'}://${CONFIG.HOST}:${CONFIG.PORT}`);
 });
 
 function shutdown() {

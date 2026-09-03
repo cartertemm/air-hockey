@@ -15,7 +15,8 @@ function httpsConfig() {
 
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), '');
-	const serverPort = env.SERVER_PORT ?? '8443';
+	const secure = mode === 'secure';
+	const serverPort = env.SERVER_PORT ?? '8080';
 	// 0.0.0.0 is a bind address, not a connect target — fall back to localhost.
 	const proxyHost = env.SERVER_HOST && env.SERVER_HOST !== '0.0.0.0' ? env.SERVER_HOST : 'localhost';
 	return {
@@ -26,10 +27,10 @@ export default defineConfig(({ mode }) => {
 		},
 		server: {
 			host: env.VITE_HOST ?? '0.0.0.0',
-			https: httpsConfig(),
+			https: secure ? httpsConfig() : false,
 			proxy: {
 				'/ws': {
-					target: `wss://${proxyHost}:${serverPort}`,
+					target: `${secure ? 'wss' : 'ws'}://${proxyHost}:${serverPort}`,
 					ws: true,
 					changeOrigin: true,
 					secure: false,

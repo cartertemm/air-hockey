@@ -4,13 +4,15 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev":        "vite",
-		"server":     "node server/index.js",
-		"start":      "npm run server",
-		"build":      "vite build",
-		"preview":    "vite preview",
-		"test":       "vitest run",
-		"test:watch": "vitest"
+		"dev":          "vite",
+		"dev-secure":   "vite --mode secure",
+		"server":       "node server/index.js",
+		"server-secure": "node server/index.js --secure",
+		"start":        "npm run server",
+		"build":        "vite build",
+		"preview":      "vite preview",
+		"test":         "vitest run",
+		"test:watch":   "vitest"
 	},
 	"dependencies": {
 		"audiogame-utils": "git+https://github.com/cartertemm/audiogame-utils.git",

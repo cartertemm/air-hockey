@@ -13,7 +13,7 @@ There are two parts:
 
 In development, the browser talks to the server over `/ws`. Vite proxies that to the local WebSocket server for you unless you point the client somewhere else with env vars.
 
-The server always runs over `wss://`, so local certs are required to start it.
+The server can run in two modes. Plain mode uses `http://` and `ws://` and needs no certificates. Secure mode uses `https://` and `wss://` and needs local certs. Both parts must be in the same mode, because a page loaded over `https://` cannot open a plain `ws://` socket. The client picks its socket scheme from the page it is served on, so you never set it by hand.
 
 ## Getting set up
 
@@ -35,15 +35,6 @@ If you are on PowerShell:
 Copy-Item .env.example .env
 ```
 
-Generate local certs with `mkcert`:
-
-```bash
-mkcert -install
-mkcert -key-file dev-certs/key.pem -cert-file dev-certs/cert.pem localhost 127.0.0.1 ::1
-```
-
-The WebSocket server expects those cert files to exist. If they do not, `npm run server` will refuse to start. Vite can still come up without them, but it falls back to HTTP and prints a warning, and the client always dials `wss://`, so the game cannot connect over that fallback. In practice you need the certs.
-
 Start the WebSocket server:
 
 ```bash
@@ -56,7 +47,37 @@ In another terminal, start the client:
 npm run dev
 ```
 
-Then open the Vite URL in a browser, which defaults to `https://localhost:5173`. The dev server already binds to all interfaces, so you do not need `--host`.
+Then open the Vite URL in a browser, which defaults to `http://localhost:5173`. The dev server already binds to all interfaces, so you do not need `--host`.
+
+## Running in secure mode
+
+Use secure mode when you need `https://`, for example to test features that browsers only allow on a secure origin.
+
+Generate local certs with `mkcert` first:
+
+```bash
+mkcert -install
+mkcert -key-file dev-certs/key.pem -cert-file dev-certs/cert.pem localhost 127.0.0.1 ::1
+```
+
+Then start both parts in secure mode:
+
+```bash
+npm run server-secure
+```
+
+```bash
+npm run dev-secure
+```
+
+Now open `https://localhost:5173`.
+
+Rules to remember:
+
+- Run both halves in the same mode. `npm run dev-secure` with `npm run server` fails, and so does the reverse.
+- `npm run server-secure` refuses to start if the cert files are missing.
+- `npm run dev-secure` warns and falls back to HTTP if the cert files are missing. The client then dials `ws://` while the server speaks `wss://`, so the game cannot connect. Generate the certs.
+- `npm run dev-secure` runs Vite in the `secure` mode, so Vite reads `.env.secure` instead of `.env.development`. Plain `.env` is still read in both modes.
 
 ## Playing on a local network
 
@@ -64,11 +85,11 @@ Two people on the same network can play without any production server. Everythin
 
 1. Find the host machine's LAN IP (`ipconfig` on Windows, `ifconfig` / `ip addr` elsewhere), for example `192.168.1.50`.
 2. Start the server (`npm run server`) and client (`npm run dev`) on the host.
-3. On the other device, open `https://<host-ip>:5173` (for example `https://192.168.1.50:5173`).
+3. On the other device, open `http://<host-ip>:5173` (for example `http://192.168.1.50:5173`).
 
-Only port `5173` needs to be reachable from the other device, so allow it through the host's firewall. The WebSocket server on `8443` only ever talks to the host itself: the browser connects same-origin to `/ws`, and Vite proxies that to `localhost:8443`.
+Only port `5173` needs to be reachable from the other device, so allow it through the host's firewall. The WebSocket server on `8080` only ever talks to the host itself: the browser connects same-origin to `/ws`, and Vite proxies that to `localhost:8080`.
 
-The dev certs are signed by a local CA that only the host machine trusts, so the second device will show a certificate warning. That is expected on a LAN: just accept it and continue. If you want to avoid the warning, install the mkcert root CA (`mkcert -CAROOT`) on the other device too.
+If you use secure mode on a LAN, the second device shows a certificate warning, because the dev certs are signed by a local CA that only the host machine trusts. Accept the warning and continue. To avoid it, install the mkcert root CA (`mkcert -CAROOT`) on the other device too.
 
 ## Environment notes
 
@@ -78,12 +99,20 @@ The dev certs are signed by a local CA that only the host machine trusts, so the
 - `SERVER_PORT` controls the WebSocket server port
 - `VITE_WS_HOST` and `VITE_WS_PORT` let the browser connect somewhere else directly instead of using the Vite `/ws` proxy
 
-The defaults are already set up for local development on port `8443`. Once this receives more testing and could be called stable, we will host a production endpoint.
+Secure mode adds two more, both optional:
+
+- `CERT_PATH` and `KEY_PATH` point the Node server at different cert files. They default to `dev-certs/cert.pem` and `dev-certs/key.pem`.
+
+You can also turn on secure mode for the server with `SECURE=true` in the environment, which does the same thing as the `--secure` flag.
+
+The defaults are already set up for local development on port `8080`. Once this receives more testing and could be called stable, we will host a production endpoint.
 
 ## Useful scripts
 
-- `npm run dev` starts the Vite dev server
-- `npm run server` starts the Node WebSocket server
+- `npm run dev` starts the Vite dev server over HTTP
+- `npm run dev-secure` starts the Vite dev server over HTTPS
+- `npm run server` starts the Node WebSocket server over `ws://`
+- `npm run server-secure` starts the Node WebSocket server over `wss://`
 - `npm run build` builds the client
 - `npm run preview` previews the built client
 - `npm test` runs the test suite once

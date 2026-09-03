@@ -21,9 +21,12 @@ function loadEnvFile(filePath) {
 
 loadEnvFile(path.resolve(process.cwd(), '.env'));
 
+const secure = process.argv.includes('--secure') || process.env.SECURE === 'true';
+
 export const CONFIG = {
 	HOST:      process.env.SERVER_HOST ?? '0.0.0.0',
-	PORT:      parseInt(process.env.SERVER_PORT ?? process.env.PORT ?? '8443', 10),
+	PORT:      parseInt(process.env.SERVER_PORT ?? process.env.PORT ?? '8080', 10),
+	SECURE:    secure,
 	CERT_PATH: process.env.CERT_PATH ?? 'dev-certs/cert.pem',
 	KEY_PATH:  process.env.KEY_PATH  ?? 'dev-certs/key.pem',
 	NODE_ENV:  process.env.NODE_ENV  ?? 'development',
